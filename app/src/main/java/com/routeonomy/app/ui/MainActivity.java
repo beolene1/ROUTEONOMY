@@ -50,9 +50,9 @@ public final class MainActivity extends Activity {
         replan();
         session.setEtaMinutes(DEMO_ETA_MINUTES);
         replan();
-        tts = new TextToSpeech(this, status -> { ttsReady = status == TextToSpeech.SUCCESS; runOnUiThread(this::render); });
         buildUi();
         render();
+        tts = new TextToSpeech(this, status -> { ttsReady = status == TextToSpeech.SUCCESS; runOnUiThread(this::render); });
         gearMonitor = new GearMonitor(this, gear -> { session.setGear(gear); runOnUiThread(this::render); }, message -> runOnUiThread(() -> sdkStatus.setText(message)));
         naviEtaClient = new NaviEtaClient(this,
             (rawTime, meters) -> { runOnUiThread(() -> sdkStatus.setText("NaviHelper 응답 · remainTime(raw)=" + rawTime + " · remainDistance=" + meters + "m")); return kotlin.Unit.INSTANCE; },
