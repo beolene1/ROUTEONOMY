@@ -11,7 +11,11 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.speech.tts.TextToSpeech;
+import ai.pleos.playground.tts.constant.ErrorType;
+import ai.pleos.playground.tts.constant.Mode;
+import ai.pleos.playground.tts.listener.EventListener;
+import ai.pleos.playground.tts.listener.OnInitializeListener;
+import java.util.Locale;
 import com.routeonomy.app.R;
 import com.routeonomy.app.data.AssetSegmentRepository;
 import com.routeonomy.app.domain.BriefingPlan;
@@ -31,6 +35,7 @@ public final class MainActivity extends Activity {
     private List<BriefingSegment> segments;
     private BriefingPlan plan;
     private final Set<String> playedSegmentIds = new HashSet<>();
+    private final Set<String> completedSegmentIds = new HashSet<>();
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
@@ -39,9 +44,12 @@ public final class MainActivity extends Activity {
     private LinearLayout simulationPanel, playbackControls;
     private Button debugToggleButton;
     private boolean playbackPaused;
-    private TextToSpeech tts;
+    private ai.pleos.playground.tts.TextToSpeech tts;
     private boolean ttsReady;
-    private int playbackIndex;
+    private boolean playbackActive;
+    private List<String> currentChunks = java.util.Collections.emptyList();
+    private int chunkIndex;
+    private String currentSegmentId;
     private Button pauseButton;
     private static final int DEMO_ETA_MINUTES = 15;
 
@@ -54,10 +62,34 @@ public final class MainActivity extends Activity {
         replan();
         buildUi();
         render();
-        tts = new TextToSpeech(this, status -> { ttsReady = status == TextToSpeech.SUCCESS; runOnUiThread(this::render); });
+        tts = new ai.pleos.playground.tts.TextToSpeech(getApplicationContext(), Mode.ON_DEVICE);
+        tts.initialize(new OnInitializeListener() {
+            @Override public void onSuccess() {
+                tts.addEventListener(new EventListener() {
+                    @Override public void onStart() { }
+                    @Override public void onReady() { }
+                    @Override public void onDone() { runOnUiThread(MainActivity.this::onChunkDone); }
+                    @Override public void onError(ErrorType error) {
+                        runOnUiThread(() -> {
+                            playbackActive = false;
+                            playbackStatus.setText("Pleos TTS 오류 · " + error);
+                            pauseButton.setText("재생");
+                        });
+                    }
+                    @Override public void onStop() { }
+                    @Override public void onUpdatedRms(double rms) { }
+                });
+                ttsReady = true;
+                tts.setLocale(Locale.KOREA);
+                runOnUiThread(() -> { playbackStatus.setText("Pleos 차량 TTS 준비 완료"); render(); });
+            }
+            @Override public void onFailure(ErrorType error) {
+                runOnUiThread(() -> playbackStatus.setText("Pleos TTS 초기화 실패 · " + error));
+            }
+        });
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!ttsReady && "TTS 초기화 중".contentEquals(playbackStatus.getText())) {
-                playbackStatus.setText("사용 가능한 TTS 엔진이 없습니다. Android 음성 출력 설정을 확인해 주세요.");
+                playbackStatus.setText("Pleos 차량 TTS 서비스에 연결되지 않았습니다.");
             }
         }, 5000);
         gearMonitor = new GearMonitor(this, gear -> { session.setGear(gear); runOnUiThread(this::render); }, message -> runOnUiThread(() -> sdkStatus.setText(message)));
@@ -78,8 +110,13 @@ public final class MainActivity extends Activity {
         details=label(18,ink); root.addView(details);
         playbackStatus=label(16,ink); playbackStatus.setText("브리핑 대기"); root.addView(playbackStatus);
         playbackControls=new LinearLayout(this);
-        pauseButton=button("재생"); pauseButton.setOnClickListener(v->{if(playbackPaused){playbackPaused=false; speakCurrent();}else if(tts!=null&&tts.isSpeaking()){tts.stop();playbackPaused=true;playbackStatus.setText("일시정지됨");pauseButton.setText("재개");}}); playbackControls.addView(pauseButton,weight());
-        Button next=button("다음 주제"); next.setOnClickListener(v->advanceBriefing()); playbackControls.addView(next,weight()); root.addView(playbackControls);
+        pauseButton=button("재생"); pauseButton.setOnClickListener(v->{
+            if (!ttsReady) { playbackStatus.setText("Pleos TTS 준비 중"); return; }
+            if (playbackPaused) { playbackPaused=false; speakCurrentChunk(); }
+            else if (playbackActive) { playbackPaused=true; playbackActive=false; tts.stop(); playbackStatus.setText("일시정지됨 · 현재 문장 처음부터 재개"); pauseButton.setText("재개"); }
+            else speakCurrent();
+        }); playbackControls.addView(pauseButton,weight());
+        Button next=button("다음 주제"); next.setOnClickListener(v->advanceBriefing(false)); playbackControls.addView(next,weight()); root.addView(playbackControls);
 
         debugToggleButton=button("시뮬레이션 입력 열기");
         simulationPanel=new LinearLayout(this); simulationPanel.setOrientation(LinearLayout.VERTICAL);
@@ -121,29 +158,47 @@ public final class MainActivity extends Activity {
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
         quizButton.setEnabled(session.canStartQuiz());
         quizStatus.setText(session.canStartQuiz()?"목적지 도착 확인 · 정차 중 퀴즈 가능":"P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다.");
-        if (!playbackPaused && (tts == null || !tts.isSpeaking()) && playbackStatus != null && !"재생 완료".contentEquals(playbackStatus.getText())) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
+        if (!playbackPaused && !playbackActive && playbackStatus != null && !"재생 완료".contentEquals(playbackStatus.getText()) && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
         if(pauseButton!=null) pauseButton.setText(playbackPaused?"재개":"재생/일시정지");
     }
     private void replan(){plan=planner.plan(session.etaMinutes(),segments,playedSegmentIds,java.util.Collections.emptySet());}
-    private void advanceBriefing(){
+    private void advanceBriefing(boolean completed){
         if(plan==null||plan.getSegments().isEmpty())return;
         if(tts!=null) tts.stop();
-        playedSegmentIds.add(plan.getSegments().get(0).getId());
-        playbackIndex++;
+        BriefingSegment previous=plan.getSegments().get(0);
+        if (completed) completedSegmentIds.add(previous.getId());
+        playedSegmentIds.add(previous.getId());
+        playbackActive=false; playbackPaused=false; currentSegmentId=null;
         replan();
         render();
-        if(!plan.getSegments().isEmpty()) speakCurrent(); else playbackStatus.setText("재생 완료 · " + playedSegmentIds.size() + "개 항목 기록");
+        if(!plan.getSegments().isEmpty()) speakCurrent(); else playbackStatus.setText("재생 완료 · " + completedSegmentIds.size() + "개 항목 청취 기록");
     }
     private void speakCurrent(){
         if(!ttsReady||plan==null||plan.getSegments().isEmpty()) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
         BriefingSegment segment=plan.getSegments().get(0);
-        playbackStatus.setText("재생 중 · "+segment.getTopic());
-        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener(){
-            @Override public void onStart(String id){}
-            @Override public void onError(String id){}
-            @Override public void onDone(String id){runOnUiThread(()->{if(!plan.getSegments().isEmpty()&&plan.getSegments().get(0).getId().equals(segment.getId()))advanceBriefing();});}
-        });
-        tts.speak(segment.getScript(),TextToSpeech.QUEUE_FLUSH,null,segment.getId());
+        currentSegmentId=segment.getId();
+        currentChunks=splitIntoChunks(segment.getScript());
+        chunkIndex=0;
+        speakCurrentChunk();
     }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.shutdown();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();super.onDestroy();}
+    private List<String> splitIntoChunks(String script) {
+        List<String> chunks = new java.util.ArrayList<>();
+        for (String part : script.split("(?<=[.!?。！？])\\s*")) if (!part.trim().isEmpty()) chunks.add(part.trim());
+        if (chunks.isEmpty() && script != null && !script.trim().isEmpty()) chunks.add(script.trim());
+        return chunks;
+    }
+    private void speakCurrentChunk() {
+        if (currentSegmentId == null || currentChunks.isEmpty() || !ttsReady) return;
+        playbackPaused=false; playbackActive=true;
+        BriefingSegment segment=plan.getSegments().get(0);
+        playbackStatus.setText("Pleos TTS 재생 중 · "+segment.getTopic());
+        pauseButton.setText("일시정지");
+        tts.speak(currentChunks.get(chunkIndex), true);
+    }
+    private void onChunkDone() {
+        if (!playbackActive || playbackPaused || currentSegmentId == null) return;
+        if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
+        else advanceBriefing(true);
+    }
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();super.onDestroy();}
 }
