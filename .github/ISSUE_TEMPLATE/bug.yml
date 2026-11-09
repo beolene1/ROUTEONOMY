@@ -1,37 +1,33 @@
-name: Bug
-description: 결함 제보
+name: "🐛 Bug"
+description: "버그 또는 예외 상황"
 title: "🐛 "
-labels: ["bug"]
+labels: ["🐛 Bug"]
 body:
   - type: textarea
-    id: description
     attributes:
       label: 버그 설명
-      description: 실제 동작과 기대 동작, 발생 환경을 적어 주세요.
+      description: 어떤 문제가 발생했는지 설명해 주세요.
+      placeholder: 예) 특정 API에서 500 오류 발생
     validations:
       required: true
+
   - type: textarea
-    id: reproduction
     attributes:
       label: 재현 방법
-      description: 문제를 재현하는 순서를 단계별로 적어 주세요.
+      description: 버그를 재현하는 방법을 단계별로 설명해 주세요.
       placeholder: |
-        1.
-        2.
-        3.
+        1. 로그인
+        2. body 없어 API 호출
+        3. 500 오류
     validations:
       required: true
+
   - type: textarea
-    id: evidence
     attributes:
       label: 스크린샷 / 로그
-      description: 오류 화면, 로그, 기기/앱 버전 등 확인 자료를 적어 주세요.
-    validations:
-      required: false
+      description: 참고할 수 있는 이미지나 오류 로그가 있다면 첨부해 주세요.
+
   - type: textarea
-    id: notes
     attributes:
       label: 비고
-      description: 원인 추정이나 대응 후보 등 추가 내용을 적어 주세요.
-    validations:
-      required: false
+      description: 기타 특이사항이나 공유할 내용이 있다면 작성해 주세요.

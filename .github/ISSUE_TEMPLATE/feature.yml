@@ -1,44 +1,38 @@
-name: Feature
-description: 기능 추가
-title: "feat: "
-labels: ["feature"]
+name: "✨ Feature"
+description: "새로운 기능 추가"
+title: "✨ "
+labels: ["✨ Feature"]
 body:
   - type: textarea
-    id: purpose
     attributes:
       label: 배경 및 목적
-      description: 현재 문제와 이 기능이 필요한 이유를 적어 주세요.
-    validations:
-      required: true
+      description: 이 기능이 왜 필요한지, 어떤 문제를 해결하는지 설명해 주세요.
+      placeholder: 예) 사용자 경험 개선을 위해, 성능 최적화를 위해 등
+
   - type: textarea
-    id: feature
     attributes:
       label: 기능 설명
-      description: 사용자가 보게 될 동작과 제한 사항을 구체적으로 적어 주세요.
+      description: 새로운 기능에 대한 설명을 작성해 주세요.
+      placeholder: 자세히 적을수록 좋습니다!
     validations:
       required: true
+
   - type: textarea
-    id: tasks
     attributes:
       label: 작업할 내용
-      description: 구현 단위와 각 단위의 완료·검증 기준을 체크리스트로 적어 주세요.
+      description: 할 일을 체크박스 형태로 작성해주세요.
       placeholder: |
-        - [ ] 구현할 내용 및 완료 조건
-        - [ ] 자동 테스트/빌드 검증
-        - [ ] 화면 또는 기기에서 직접 확인
+        - [ ] A 구현...
+        - [ ] B 테스트...
     validations:
       required: true
+
   - type: textarea
-    id: references
     attributes:
       label: 참고 자료
-      description: 관련 이슈, 문서, 코드, 외부 자료를 적어 주세요.
-    validations:
-      required: false
+      description: 참고 자료가 있다면 직접 작성 또는 링크로 첨부해 주세요.
+
   - type: textarea
-    id: notes
     attributes:
       label: 비고
-      description: 의존성, 알려진 한계, 사용자 확인이 필요한 내용을 적어 주세요.
-    validations:
-      required: false
+      description: 기타 특이사항이나 공유할 내용이 있다면 작성해 주세요.
