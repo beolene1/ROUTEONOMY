@@ -9,6 +9,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.speech.tts.TextToSpeech;
 import com.routeonomy.app.R;
 import com.routeonomy.app.data.AssetSegmentRepository;
 import com.routeonomy.app.domain.BriefingPlan;
@@ -36,12 +37,20 @@ public final class MainActivity extends Activity {
     private LinearLayout simulationPanel, playbackControls;
     private Button debugToggleButton;
     private boolean playbackPaused;
+    private TextToSpeech tts;
+    private boolean ttsReady;
+    private int playbackIndex;
+    private Button pauseButton;
+    private static final int DEMO_ETA_MINUTES = 15;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         fake = new FakeVehicleInput(session);
         segments = new AssetSegmentRepository(this).load();
         replan();
+        session.setEtaMinutes(DEMO_ETA_MINUTES);
+        replan();
+        tts = new TextToSpeech(this, status -> { ttsReady = status == TextToSpeech.SUCCESS; runOnUiThread(this::render); });
         buildUi();
         render();
         gearMonitor = new GearMonitor(this, gear -> { session.setGear(gear); runOnUiThread(this::render); }, message -> runOnUiThread(() -> sdkStatus.setText(message)));
@@ -62,7 +71,7 @@ public final class MainActivity extends Activity {
         details=label(18,ink); root.addView(details);
         playbackStatus=label(16,ink); playbackStatus.setText("브리핑 대기"); root.addView(playbackStatus);
         playbackControls=new LinearLayout(this);
-        Button pause=button("일시정지"); pause.setOnClickListener(v->{playbackPaused=!playbackPaused;playbackStatus.setText(playbackPaused?"일시정지됨":"브리핑 재생 대기");}); playbackControls.addView(pause,weight());
+        pauseButton=button("재생"); pauseButton.setOnClickListener(v->{if(playbackPaused){playbackPaused=false; speakCurrent();}else if(tts!=null&&tts.isSpeaking()){tts.stop();playbackPaused=true;playbackStatus.setText("일시정지됨");pauseButton.setText("재개");}}); playbackControls.addView(pauseButton,weight());
         Button next=button("다음 주제"); next.setOnClickListener(v->advanceBriefing()); playbackControls.addView(next,weight()); root.addView(playbackControls);
 
         debugToggleButton=button("시뮬레이션 입력 열기");
@@ -95,7 +104,7 @@ public final class MainActivity extends Activity {
         boolean driving=session.isDriving(); mode.setText(driving?"주행 모드":"주차 모드");
         mode.setVisibility(driving?View.GONE:View.VISIBLE);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
-        eta.setText(session.etaMinutes()+"분"); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
+        eta.setText("시연 ETA " + session.etaMinutes()+"분"); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
         details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
         playbackControls.setVisibility(driving?View.GONE:View.VISIBLE);
@@ -105,14 +114,29 @@ public final class MainActivity extends Activity {
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
         quizButton.setEnabled(session.canStartQuiz());
         quizStatus.setText(session.canStartQuiz()?"목적지 도착 확인 · 정차 중 퀴즈 가능":"P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다.");
-        playbackStatus.setText(playbackPaused?"일시정지됨":"브리핑 재생 대기 · TTS 미연결");
+        if (!playbackPaused && (tts == null || !tts.isSpeaking()) && playbackStatus != null && !"재생 완료".contentEquals(playbackStatus.getText())) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
+        if(pauseButton!=null) pauseButton.setText(playbackPaused?"재개":"재생/일시정지");
     }
     private void replan(){plan=planner.plan(session.etaMinutes(),segments,playedSegmentIds,java.util.Collections.emptySet());}
     private void advanceBriefing(){
         if(plan==null||plan.getSegments().isEmpty())return;
+        if(tts!=null) tts.stop();
         playedSegmentIds.add(plan.getSegments().get(0).getId());
+        playbackIndex++;
         replan();
         render();
+        if(!plan.getSegments().isEmpty()) speakCurrent(); else playbackStatus.setText("재생 완료 · " + playedSegmentIds.size() + "개 항목 기록");
     }
-    @Override protected void onDestroy(){if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();super.onDestroy();}
+    private void speakCurrent(){
+        if(!ttsReady||plan==null||plan.getSegments().isEmpty()) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
+        BriefingSegment segment=plan.getSegments().get(0);
+        playbackStatus.setText("재생 중 · "+segment.getTopic());
+        tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener(){
+            @Override public void onStart(String id){}
+            @Override public void onError(String id){}
+            @Override public void onDone(String id){runOnUiThread(()->{if(!plan.getSegments().isEmpty()&&plan.getSegments().get(0).getId().equals(segment.getId()))advanceBriefing();});}
+        });
+        tts.speak(segment.getScript(),TextToSpeech.QUEUE_FLUSH,null,segment.getId());
+    }
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.shutdown();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();super.onDestroy();}
 }
