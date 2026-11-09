@@ -1,0 +1,7 @@
+<resources>
+    <color name="routeonomy_background">#F7F5F2</color>
+    <color name="routeonomy_text">#262D35</color>
+    <color name="routeonomy_accent">#DC9EAC</color>
+    <color name="routeonomy_muted">#A9B4BD</color>
+    <color name="routeonomy_card">#FFFFFF</color>
+</resources>

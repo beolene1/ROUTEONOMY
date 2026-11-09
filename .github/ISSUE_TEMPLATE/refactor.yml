@@ -1,0 +1,21 @@
+name: Refactor
+description: 동작을 바꾸지 않는 구조 개선
+title: "refactor: "
+labels: ["refactor"]
+body:
+  - type: textarea
+    id: purpose
+    attributes: { label: 목적 }
+    validations: { required: true }
+  - type: textarea
+    id: scope
+    attributes: { label: 작업 범위 }
+    validations: { required: true }
+  - type: textarea
+    id: done
+    attributes: { label: 완료 조건, description: 기존 동작 보존 기준을 적어 주세요. }
+    validations: { required: true }
+  - type: textarea
+    id: verify
+    attributes: { label: 검증 방법 }
+    validations: { required: true }
