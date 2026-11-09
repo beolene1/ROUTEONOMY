@@ -31,7 +31,7 @@ public final class MainActivity extends Activity {
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
-    private TextView mode, eta, topic, details, quizStatus, sdkStatus, playbackStatus;
+    private TextView mode, eta, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
     private Button debugToggleButton;
@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
         eta=label(64,ink); eta.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(eta);
         topic=label(30,ink); topic.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(topic);
         details=label(18,ink); root.addView(details);
+        discoveries=label(16,ink); root.addView(discoveries);
         playbackStatus=label(16,ink); playbackStatus.setText("브리핑 대기"); root.addView(playbackStatus);
         playbackControls=new LinearLayout(this);
         Button pause=button("일시정지"); pause.setOnClickListener(v->{playbackPaused=!playbackPaused;playbackStatus.setText(playbackPaused?"일시정지됨":"브리핑 재생 대기");}); playbackControls.addView(pause,weight());
@@ -98,6 +99,14 @@ public final class MainActivity extends Activity {
         eta.setText(session.etaMinutes()+"분"); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
         details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
+        StringBuilder listened = new StringBuilder("오늘의 발견\n");
+        for (BriefingSegment segment : segments) if (playedSegmentIds.contains(segment.getId())) {
+            listened.append("• ").append(segment.getTopic()).append(" · ").append(String.join(", ", segment.getKeywords()))
+                .append("\n용어: ").append(segment.getTerm().getName()).append(" — ").append(segment.getTerm().getExplanation())
+                .append("\n출처: ").append(segment.getSources().isEmpty()?"없음":segment.getSources().get(0)).append("\n");
+        }
+        discoveries.setText(listened.length()==6?"오늘의 발견\n아직 들은 브리핑이 없습니다.":listened.toString());
+        discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
         playbackControls.setVisibility(driving?View.GONE:View.VISIBLE);
         debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
         simulationPanel.setVisibility(driving?View.GONE:simulationPanel.getVisibility());
