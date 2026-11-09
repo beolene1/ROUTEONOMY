@@ -2,6 +2,8 @@ package com.routeonomy.app.ui;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
@@ -53,6 +55,11 @@ public final class MainActivity extends Activity {
         buildUi();
         render();
         tts = new TextToSpeech(this, status -> { ttsReady = status == TextToSpeech.SUCCESS; runOnUiThread(this::render); });
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!ttsReady && "TTS 초기화 중".contentEquals(playbackStatus.getText())) {
+                playbackStatus.setText("사용 가능한 TTS 엔진이 없습니다. Android 음성 출력 설정을 확인해 주세요.");
+            }
+        }, 5000);
         gearMonitor = new GearMonitor(this, gear -> { session.setGear(gear); runOnUiThread(this::render); }, message -> runOnUiThread(() -> sdkStatus.setText(message)));
         naviEtaClient = new NaviEtaClient(this,
             (rawTime, meters) -> { runOnUiThread(() -> sdkStatus.setText("NaviHelper 응답 · remainTime(raw)=" + rawTime + " · remainDistance=" + meters + "m")); return kotlin.Unit.INSTANCE; },
