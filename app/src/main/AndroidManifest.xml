@@ -4,12 +4,7 @@
 
     <uses-permission android:name="pleos.car.permission.CAR_DRIVE" />
     <uses-permission android:name="pleos.car.permission.NAVI_ROUTE" />
-
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
-        </intent>
-    </queries>
+    <uses-permission android:name="pleos.car.permission.TTS_SERVICE" />
 
     <application
         android:allowBackup="true"
