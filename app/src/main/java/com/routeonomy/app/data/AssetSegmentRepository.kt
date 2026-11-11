@@ -8,8 +8,15 @@ import org.json.JSONObject
 
 class AssetSegmentRepository(private val context: Context) {
     fun load(): List<BriefingSegment> = context.assets.open("segments.json").bufferedReader().use { reader ->
-        val rows = JSONArray(reader.readText())
-        (0 until rows.length()).map { index -> rows.getJSONObject(index).toSegment() }
+        SegmentJsonParser.segments(reader.readText())
+    }
+}
+
+/** Parses briefing segments from local JSON text. */
+object SegmentJsonParser {
+    fun segments(json: String): List<BriefingSegment> {
+        val rows = JSONArray(json)
+        return (0 until rows.length()).map { index -> rows.getJSONObject(index).toSegment() }
     }
 
     private fun JSONObject.toSegment(): BriefingSegment {
@@ -23,7 +30,7 @@ class AssetSegmentRepository(private val context: Context) {
             industries = getJSONArray("industries").strings(),
             keywords = getJSONArray("keywords").strings(),
             term = SegmentTerm(termJson.getString("name"), termJson.getString("explanation")),
-            regionId = optString("regionId").takeIf(String::isNotEmpty),
+            regionId = optString("regionId").takeIf { it.isNotEmpty() && it != "null" },
             sources = getJSONArray("sources").strings(),
         )
     }

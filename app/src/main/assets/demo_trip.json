@@ -1,0 +1,5 @@
+{
+  "origin":{"name":"서울역","latitude":37.5547,"longitude":126.9707},
+  "destination":{"name":"정자역","latitude":37.3670,"longitude":127.1085},
+  "remainingMinutes":30
+}
