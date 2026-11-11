@@ -23,11 +23,13 @@ import com.routeonomy.app.domain.BriefingPlan;
 import com.routeonomy.app.domain.BriefingPlanner;
 import com.routeonomy.app.domain.BriefingSegment;
 import com.routeonomy.app.domain.DriveSession;
+import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
 import com.routeonomy.app.simulation.FakeVehicleInput;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -37,11 +39,11 @@ public final class MainActivity extends Activity {
     private List<BriefingSegment> segments;
     private BriefingPlan plan;
     private final Set<String> playedSegmentIds = new HashSet<>();
-    private final Set<String> completedSegmentIds = new HashSet<>();
+    private final Set<String> completedSegmentIds = new LinkedHashSet<>();
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
-    private TextView mode, eta, topic, details, quizStatus, sdkStatus, playbackStatus;
+    private TextView mode, eta, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
     private Button debugToggleButton;
@@ -133,6 +135,7 @@ public final class MainActivity extends Activity {
         eta=label(64,ink); eta.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(eta);
         topic=label(30,ink); topic.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(topic);
         details=label(18,ink); root.addView(details);
+        discoveries=label(16,ink); root.addView(discoveries);
         playbackStatus=label(16,ink); playbackStatus.setText("브리핑 대기"); root.addView(playbackStatus);
         playbackControls=new LinearLayout(this);
         pauseButton=button("재생"); pauseButton.setOnClickListener(v->{
@@ -229,6 +232,8 @@ public final class MainActivity extends Activity {
         eta.setText("시연 ETA " + session.etaMinutes()+"분"); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
         details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
+        discoveries.setText(discoveryText());
+        discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
         playbackControls.setVisibility(driving?View.GONE:View.VISIBLE);
         debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
         simulationPanel.setVisibility(driving?View.GONE:simulationPanel.getVisibility());
@@ -238,6 +243,18 @@ public final class MainActivity extends Activity {
         quizStatus.setText(session.canStartQuiz()?"목적지 도착 확인 · 정차 중 퀴즈 가능":"P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다.");
         if (!playbackPaused && !playbackActive && playbackStatus != null && !"재생 완료".contentEquals(playbackStatus.getText()) && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
         if(pauseButton!=null) pauseButton.setText(playbackPaused?"재개":"재생/일시정지");
+    }
+    private String discoveryText(){
+        List<BriefingSegment> heard = TodayDiscoveries.from(segments, completedSegmentIds);
+        if (heard.isEmpty()) return "오늘의 발견\n아직 끝까지 들은 브리핑이 없습니다.";
+        StringBuilder text = new StringBuilder("오늘의 발견");
+        for (BriefingSegment s : heard) {
+            text.append("\n\n• ").append(s.getTopic());
+            if (!s.getKeywords().isEmpty()) text.append("\n키워드: ").append(String.join(", ", s.getKeywords()));
+            text.append("\n용어: ").append(s.getTerm().getName()).append(" — ").append(s.getTerm().getExplanation());
+            text.append("\n원문: ").append(s.getSources().isEmpty() ? "없음" : s.getSources().get(0));
+        }
+        return text.toString();
     }
     private void replan(){plan=planner.plan(session.etaMinutes(),segments,playedSegmentIds,java.util.Collections.emptySet());}
     private void advanceBriefing(boolean completed){
