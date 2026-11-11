@@ -5,11 +5,11 @@
     "longitude": 126.97233
   },
   "destination": {
-    "name": "정자역",
-    "latitude": 37.36676,
-    "longitude": 127.10827
+    "name": "기흥역",
+    "latitude": 37.27566,
+    "longitude": 127.11595
   },
-  "remainingMinutes": 30,
+  "remainingMinutes": 40,
   "simulationStops": [
     {
       "name": "판교 진입 직전",
@@ -17,9 +17,9 @@
       "longitude": 127.09543
     },
     {
-      "name": "정자역 근처",
-      "latitude": 37.37126,
-      "longitude": 127.10829
+      "name": "기흥역 근처",
+      "latitude": 37.28015,
+      "longitude": 127.11568
     }
   ]
 }
