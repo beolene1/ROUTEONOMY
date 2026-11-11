@@ -8,6 +8,7 @@ import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -25,6 +26,7 @@ import com.routeonomy.app.domain.DriveSession;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
 import com.routeonomy.app.simulation.FakeVehicleInput;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -43,6 +45,12 @@ public final class MainActivity extends Activity {
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
     private Button debugToggleButton;
+    private Button dashboardBackButton;
+    private PreDriveDashboard dashboard;
+    private ScrollView dashboardScroll;
+    private ScrollView briefingScroll;
+    private boolean briefingStarted;
+    private boolean toolsOpen;
     private boolean playbackPaused;
     private ai.pleos.playground.tts.TextToSpeech tts;
     private boolean ttsReady;
@@ -81,15 +89,25 @@ public final class MainActivity extends Activity {
                 });
                 ttsReady = true;
                 tts.setLocale(Locale.KOREA);
-                runOnUiThread(() -> { playbackStatus.setText("Pleos 차량 TTS 준비 완료"); render(); });
+                runOnUiThread(() -> {
+                    playbackStatus.setText("Pleos 차량 TTS 준비 완료");
+                    dashboard.showStatus("");
+                    render();
+                });
             }
             @Override public void onFailure(ErrorType error) {
-                runOnUiThread(() -> playbackStatus.setText("Pleos TTS 초기화 실패 · " + error));
+                runOnUiThread(() -> {
+                    String message = "Pleos TTS 초기화 실패 · " + error;
+                    playbackStatus.setText(message);
+                    dashboard.showStatus(message);
+                });
             }
         });
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!ttsReady && "TTS 초기화 중".contentEquals(playbackStatus.getText())) {
-                playbackStatus.setText("Pleos 차량 TTS 서비스에 연결되지 않았습니다.");
+                String message = "Pleos 차량 TTS 서비스에 연결되지 않았습니다.";
+                playbackStatus.setText(message);
+                dashboard.showStatus(message);
             }
         }, 5000);
         gearMonitor = new GearMonitor(this, gear -> { session.setGear(gear); runOnUiThread(this::render); }, message -> runOnUiThread(() -> sdkStatus.setText(message)));
@@ -101,9 +119,16 @@ public final class MainActivity extends Activity {
 
     private void buildUi() {
         int bg=getColor(R.color.routeonomy_background), ink=getColor(R.color.routeonomy_text);
-        ScrollView scroll=new ScrollView(this);
+        briefingScroll = new ScrollView(this);
+        briefingScroll.setFillViewport(true);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setGravity(Gravity.CENTER_VERTICAL);
-        root.setPadding(28,24,28,24); root.setBackgroundColor(bg); scroll.addView(root);
+        root.setPadding(28,24,28,24); root.setBackgroundColor(bg); briefingScroll.addView(root);
+        dashboardBackButton = button("주행 전 화면");
+        dashboardBackButton.setOnClickListener(v -> {
+            toolsOpen = false;
+            render();
+        });
+        root.addView(dashboardBackButton, full());
         mode=label(16,ink); root.addView(mode);
         eta=label(64,ink); eta.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(eta);
         topic=label(30,ink); topic.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(topic);
@@ -136,7 +161,53 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->quizStatus.setText("시연용 퀴즈 화면 · 문항/정답은 후속 구현")); root.addView(quizButton,full());
-        setContentView(scroll);
+        dashboard = new PreDriveDashboard(this, this::startDashboardBriefing,
+                this::changeDashboardTopic, () -> openTools(true), () -> openTools(false));
+        dashboardScroll = new ScrollView(this);
+        dashboardScroll.setFillViewport(true);
+        dashboardScroll.addView(dashboard);
+
+        FrameLayout screen = new FrameLayout(this);
+        screen.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
+        screen.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
+        setContentView(screen);
+    }
+
+    private void openTools(boolean showSimulation) {
+        toolsOpen = true;
+        simulationPanel.setVisibility(showSimulation ? View.VISIBLE : View.GONE);
+        debugToggleButton.setText(showSimulation ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
+        render();
+    }
+
+    private void startDashboardBriefing() {
+        if (!ttsReady) {
+            dashboard.showStatus(playbackStatus.getText());
+            return;
+        }
+        speakCurrent();
+    }
+
+    private boolean canChangeDashboardTopic() {
+        int topicCount = 0;
+        for (BriefingSegment segment : plan.getSegments()) {
+            if (segment.getType() == BriefingSegment.Type.MAIN && ++topicCount > 1) return true;
+        }
+        return false;
+    }
+
+    private void changeDashboardTopic() {
+        if (!canChangeDashboardTopic()) return;
+        List<BriefingSegment> reordered = new ArrayList<>(plan.getSegments());
+        BriefingSegment first = reordered.remove(0);
+        int nextNonTopic = 0;
+        while (nextNonTopic < reordered.size()
+                && reordered.get(nextNonTopic).getType() == BriefingSegment.Type.MAIN) {
+            nextNonTopic++;
+        }
+        reordered.add(nextNonTopic, first);
+        plan = new BriefingPlan(reordered);
+        render();
     }
 
     private void addGearButton(LinearLayout row,String title,DriveSession.Gear gear){Button b=button(title);b.setOnClickListener(v->{fake.setGear(gear);render();});row.addView(b,weight());}
@@ -145,9 +216,16 @@ public final class MainActivity extends Activity {
     private LinearLayout.LayoutParams full(){return new LinearLayout.LayoutParams(-1,-2);}
     private LinearLayout.LayoutParams weight(){return new LinearLayout.LayoutParams(0,-2,1);}
     private void render(){
-        boolean driving=session.isDriving(); mode.setText(driving?"주행 모드":"주차 모드");
+        boolean driving = session.isDriving();
+        boolean preDrive = !driving && !briefingStarted && !session.canStartQuiz();
+        boolean showDashboard = preDrive && !toolsOpen;
+        dashboardScroll.setVisibility(showDashboard ? View.VISIBLE : View.GONE);
+        briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
+        dashboardBackButton.setVisibility(preDrive ? View.VISIBLE : View.GONE);
+        mode.setText(driving?"주행 모드":"주차 모드");
         mode.setVisibility(driving?View.GONE:View.VISIBLE);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
+        dashboard.bindTopic(current, canChangeDashboardTopic());
         eta.setText("시연 ETA " + session.etaMinutes()+"분"); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
         details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
@@ -190,6 +268,10 @@ public final class MainActivity extends Activity {
     private void speakCurrentChunk() {
         if (currentSegmentId == null || currentChunks.isEmpty() || !ttsReady) return;
         playbackPaused=false; playbackActive=true;
+        if (!briefingStarted) {
+            briefingStarted = true;
+            render();
+        }
         BriefingSegment segment=plan.getSegments().get(0);
         playbackStatus.setText("Pleos TTS 재생 중 · "+segment.getTopic());
         pauseButton.setText("일시정지");
