@@ -82,6 +82,10 @@ public final class MainActivity extends Activity {
     private String regionSectionId;
     private String pendingAnnouncement;
     private boolean waitingForRegion;
+    private boolean simulationOpen;
+    private String preferredFirstId;
+    private LinearLayout demoMovePanel;
+    private Button enterButton;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -178,23 +182,26 @@ public final class MainActivity extends Activity {
 
         debugToggleButton=button("시뮬레이션 입력 열기");
         simulationPanel=new LinearLayout(this); simulationPanel.setOrientation(LinearLayout.VERTICAL);
-        debugToggleButton.setOnClickListener(v->{int visibility=simulationPanel.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE;simulationPanel.setVisibility(visibility);debugToggleButton.setText(visibility==View.VISIBLE?"시뮬레이션 입력 닫기":"시뮬레이션 입력 열기");});
+        debugToggleButton.setOnClickListener(v->{simulationOpen=!simulationOpen;debugToggleButton.setText(simulationOpen?"시뮬레이션 입력 닫기":"시뮬레이션 입력 열기");render();});
         root.addView(debugToggleButton,full());
         LinearLayout gears=new LinearLayout(this);
         addGearButton(gears,"P",DriveSession.Gear.PARK); addGearButton(gears,"R",DriveSession.Gear.REVERSE);
         addGearButton(gears,"N",DriveSession.Gear.NEUTRAL); addGearButton(gears,"D",DriveSession.Gear.DRIVE);
         simulationPanel.addView(gears);
         LinearLayout etaControls=new LinearLayout(this);
-        Button less=button("ETA −5분"); less.setOnClickListener(v->{fake.setEta(session.etaMinutes()-5);updatePrediction();replan();render();}); etaControls.addView(less,weight());
-        Button more=button("ETA +5분"); more.setOnClickListener(v->{fake.setEta(session.etaMinutes()+5);updatePrediction();replan();render();}); etaControls.addView(more,weight()); simulationPanel.addView(etaControls);
+        Button less=button("ETA −5분"); less.setOnClickListener(v->{fake.setEta(session.etaMinutes()-5);refreshRoute();}); etaControls.addView(less,weight());
+        Button more=button("ETA +5분"); more.setOnClickListener(v->{fake.setEta(session.etaMinutes()+5);refreshRoute();}); etaControls.addView(more,weight()); simulationPanel.addView(etaControls);
         Button arrived=button("시뮬레이션 도착 토글"); arrived.setOnClickListener(v->{fake.markArrived(session.arrival()!=DriveSession.Arrival.ARRIVED);render();}); simulationPanel.addView(arrived,full());
+        // Demo-only movement row. It is the one simulation control kept on the driving screen.
+        demoMovePanel=new LinearLayout(this); demoMovePanel.setOrientation(LinearLayout.VERTICAL);
         List<Place> stops = fakeRoute.stops();
         if (!stops.isEmpty()) addMoveButton(stops.get(0));
-        Button enter=button(enterButtonLabel()); enter.setOnClickListener(v->{Region target=entryTarget(); if(target!=null) onLocationChanged(null, fakeRoute.enterRegion(target));}); simulationPanel.addView(enter,full());
+        enterButton=button("지역 진입"); enterButton.setOnClickListener(v->{Region target=entryTarget(); if(target!=null) onLocationChanged(fakeRoute.enterRegion(target));}); demoMovePanel.addView(enterButton,full());
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
+        demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
 
         quizStatus=label(18,ink); root.addView(quizStatus);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->quizStatus.setText("시연용 퀴즈 화면 · 문항/정답은 후속 구현")); root.addView(quizButton,full());
@@ -212,7 +219,7 @@ public final class MainActivity extends Activity {
 
     private void openTools(boolean showSimulation) {
         toolsOpen = true;
-        simulationPanel.setVisibility(showSimulation ? View.VISIBLE : View.GONE);
+        simulationOpen = showSimulation;
         debugToggleButton.setText(showSimulation ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
         render();
     }
@@ -244,20 +251,20 @@ public final class MainActivity extends Activity {
         }
         reordered.add(nextNonTopic, first);
         plan = new BriefingPlan(reordered);
+        preferredFirstId = reordered.get(0).getId();
         render();
     }
 
-    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->onLocationChanged(null, fakeRoute.moveTo(stop)));simulationPanel.addView(b,full());}
+    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->onLocationChanged(fakeRoute.moveTo(stop)));demoMovePanel.addView(b,full());}
+    /** The demo can only enter the region the trip is predicted to pass; nothing once a region was entered. */
     private Region entryTarget(){
-        if (prediction != null) return prediction.getRegion();
-        for (Region r : regions) if (regionsWithContent.contains(r.getId())) return r;
-        return regions.isEmpty() ? null : regions.get(0);
+        if (regionTransition.enteredRegionId() != null || prediction == null) return null;
+        return prediction.getRegion();
     }
-    private String enterButtonLabel(){Region r=entryTarget();return (r==null?"지역":r.getName())+" 진입";}
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
     /** Simulated location update; a Pleos FusedLocation/ProximityAlert adapter would call the same path. */
-    private void onLocationChanged(GeoPoint ignored, int remainingMinutes) {
+    private void onLocationChanged(int remainingMinutes) {
         currentLocation = fakeRoute.getLocation();
         fake.setEta(remainingMinutes);
         Region entered = RegionPredictor.regionAt(currentLocation, regions);
@@ -270,10 +277,14 @@ public final class MainActivity extends Activity {
             if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
             return;
         }
+        refreshRoute();
+    }
+    /** Recomputes the prediction and queue after a position or remaining-time change. */
+    private void refreshRoute() {
         updatePrediction();
         replan();
-        if (waitingForRegion && prediction == null && !playbackActive && !playbackPaused) {
-            // Passed the expected region without entering it: stop waiting and finish with the general queue.
+        if (waitingForRegion && !playbackActive && !playbackPaused && (prediction == null || !plan.getSegments().isEmpty())) {
+            // Passed the expected region, or the new estimate leaves room for more A segments: resume.
             waitingForRegion = false;
             render();
             if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
@@ -326,7 +337,12 @@ public final class MainActivity extends Activity {
         discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
         playbackControls.setVisibility(driving?View.GONE:View.VISIBLE);
         debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
-        // Demo-only: an opened simulation panel stays available while driving so stops can be triggered in D.
+        simulationPanel.setVisibility(simulationOpen && !driving ? View.VISIBLE : View.GONE);
+        // Demo-only: the movement row stays available in D so the region switch can be shown while driving.
+        demoMovePanel.setVisibility(simulationOpen ? View.VISIBLE : View.GONE);
+        Region target = entryTarget();
+        enterButton.setText((target == null ? "지역" : target.getName()) + " 진입");
+        enterButton.setEnabled(target != null);
         quizButton.setVisibility(driving?View.GONE:View.VISIBLE);
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
         quizButton.setEnabled(session.canStartQuiz());
@@ -359,6 +375,10 @@ public final class MainActivity extends Activity {
         List<BriefingSegment> queue = new ArrayList<>();
         if (current != null) queue.add(current);
         queue.addAll(next.getSegments());
+        if (current == null && preferredFirstId != null) {
+            // Keep the topic picked on the pre-drive dashboard first until playback starts.
+            for (int i = 0; i < queue.size(); i++) if (queue.get(i).getId().equals(preferredFirstId)) { queue.add(0, queue.remove(i)); break; }
+        }
         plan = new BriefingPlan(queue);
     }
     private void advanceBriefing(boolean completed){
@@ -381,7 +401,24 @@ public final class MainActivity extends Activity {
     }
     private void speakCurrent(){
         if(!ttsReady) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
-        if(plan==null||plan.getSegments().isEmpty()) { playbackStatus.setText(waitingForRegion?"지역 진입 대기 중":"남은 브리핑이 없습니다"); return; }
+        preferredFirstId=null;
+        String switchTo = regionTransition.consumePendingSwitch();
+        if (switchTo != null) {
+            // Playback stopped (e.g. TTS error) while a switch was pending: drop the interrupted A segment.
+            if (currentSegmentId != null) playedSegmentIds.add(currentSegmentId);
+            currentSegmentId = null;
+            startRegionSection(switchTo);
+            replan();
+        }
+        if(plan==null||plan.getSegments().isEmpty()) {
+            if (regionSectionId == null && prediction != null) {
+                waitingForRegion = true;
+                briefingStarted = true;
+                playbackStatus.setText(prediction.getRegion().getName() + " 진입 대기");
+                render();
+            } else playbackStatus.setText("남은 브리핑이 없습니다");
+            return;
+        }
         waitingForRegion=false;
         BriefingSegment segment=plan.getSegments().get(0);
         currentSegmentId=segment.getId();

@@ -8,7 +8,9 @@ import org.junit.Test
 
 /** Checks that the bundled demo JSON parses and is internally consistent. */
 class BundledContentTest {
-    private fun asset(name: String) = File("src/main/assets/$name").readText()
+    /** Works whether tests run from the app module (Gradle) or the project root (some IDE configs). */
+    private fun asset(name: String): String =
+        listOf("src/main/assets", "app/src/main/assets").map { File(it, name) }.first { it.exists() }.readText()
     private val segments = SegmentJsonParser.segments(asset("segments.json"))
     private val regions = RouteJsonParser.regions(asset("regions.json"))
     private val trip = RouteJsonParser.trip(asset("demo_trip.json"))
