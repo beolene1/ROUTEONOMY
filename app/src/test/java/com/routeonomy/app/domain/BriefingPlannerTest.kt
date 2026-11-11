@@ -34,6 +34,33 @@ class BriefingPlannerTest {
         assertEquals(emptyList<String>(), result.segments)
     }
 
-    private fun segment(id: String, type: BriefingSegment.Type, seconds: Int, tags: List<String> = emptyList()) =
-        BriefingSegment(id, type, id, "script", seconds, tags, emptyList(), SegmentTerm("term", "meaning"), null, emptyList())
+    private val region1 = segment("r1", BriefingSegment.Type.REGION, 120, region = "pangyo")
+    private val region2 = segment("r2", BriefingSegment.Type.REGION, 150, region = "pangyo")
+    private val otherRegion = segment("o1", BriefingSegment.Type.REGION, 60, region = "dongtan")
+
+    @Test fun beforeRegionLeavesWrapUpForRegionSection() {
+        val result = planner.planBeforeRegion(5, listOf(mainA, mainB, wrap, region1))
+        assertEquals(listOf("a"), result.segments.map { it.id })
+    }
+
+    @Test fun beforeRegionWithLittleTimeIsEmpty() {
+        assertEquals(emptyList<String>(), planner.planBeforeRegion(1, listOf(mainA, mainB, wrap)).segments.map { it.id })
+    }
+
+    @Test fun regionSectionUsesOnlyThatRegionThenWrapUp() {
+        val all = listOf(mainA, region1, region2, otherRegion, wrap)
+        assertEquals(listOf("r1", "r2", "wrap"), planner.planRegion(7, "pangyo", all).segments.map { it.id })
+        assertEquals(listOf("r1", "wrap"), planner.planRegion(5, "pangyo", all).segments.map { it.id })
+        assertEquals(listOf("o1", "wrap"), planner.planRegion(5, "dongtan", all).segments.map { it.id })
+    }
+
+    @Test fun regionSectionSkipsPlayedAndKeepsWrapUpWhenShort() {
+        val all = listOf(region1, region2, wrap)
+        assertEquals(listOf("r2", "wrap"), planner.planRegion(10, "pangyo", all, setOf("r1")).segments.map { it.id })
+        assertEquals(listOf("wrap"), planner.planRegion(1, "pangyo", all).segments.map { it.id })
+        assertEquals(emptyList<String>(), planner.planRegion(10, "pangyo", all, setOf("r1", "r2", "wrap")).segments.map { it.id })
+    }
+
+    private fun segment(id: String, type: BriefingSegment.Type, seconds: Int, tags: List<String> = emptyList(), region: String? = null) =
+        BriefingSegment(id, type, id, "script", seconds, tags, emptyList(), SegmentTerm("term", "meaning"), region, emptyList())
 }
