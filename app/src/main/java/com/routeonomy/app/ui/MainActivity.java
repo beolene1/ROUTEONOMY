@@ -18,14 +18,24 @@ import ai.pleos.playground.tts.listener.EventListener;
 import ai.pleos.playground.tts.listener.OnInitializeListener;
 import java.util.Locale;
 import com.routeonomy.app.R;
+import com.routeonomy.app.data.AssetRouteRepository;
 import com.routeonomy.app.data.AssetSegmentRepository;
 import com.routeonomy.app.domain.BriefingPlan;
 import com.routeonomy.app.domain.BriefingPlanner;
 import com.routeonomy.app.domain.BriefingSegment;
 import com.routeonomy.app.domain.DriveSession;
+import com.routeonomy.app.domain.GeoPoint;
+import com.routeonomy.app.domain.Place;
+import com.routeonomy.app.domain.Region;
+import com.routeonomy.app.domain.RegionPrediction;
+import com.routeonomy.app.domain.RegionPredictor;
+import com.routeonomy.app.domain.RegionRoutingKt;
+import com.routeonomy.app.domain.RegionTransition;
+import com.routeonomy.app.domain.TripContext;
 import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
+import com.routeonomy.app.simulation.FakeRouteInput;
 import com.routeonomy.app.simulation.FakeVehicleInput;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,7 +53,7 @@ public final class MainActivity extends Activity {
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
-    private TextView mode, eta, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
+    private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
     private Button debugToggleButton;
@@ -61,14 +71,33 @@ public final class MainActivity extends Activity {
     private int chunkIndex;
     private String currentSegmentId;
     private Button pauseButton;
-    private static final int DEMO_ETA_MINUTES = 15;
+    // Route-aware briefing (F2/F3/F5): A section before a region, B section after entering it.
+    private final RegionTransition regionTransition = new RegionTransition();
+    private final Set<String> regionsWithContent = new HashSet<>();
+    private List<Region> regions;
+    private TripContext trip;
+    private FakeRouteInput fakeRoute;
+    private GeoPoint currentLocation;
+    private RegionPrediction prediction;
+    private String regionSectionId;
+    private String pendingAnnouncement;
+    private boolean waitingForRegion;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         fake = new FakeVehicleInput(session);
         segments = new AssetSegmentRepository(this).load();
-        replan();
-        session.setEtaMinutes(DEMO_ETA_MINUTES);
+        for (BriefingSegment s : segments) if (s.getRegionId() != null) regionsWithContent.add(s.getRegionId());
+        AssetRouteRepository routes = new AssetRouteRepository(this);
+        regions = routes.regions();
+        trip = routes.demoTrip();
+        fakeRoute = new FakeRouteInput(trip, routes.simulationStops());
+        currentLocation = trip.getCurrent().getLocation();
+        List<String> startRegions = new ArrayList<>();
+        for (Region r : regions) if (RegionRoutingKt.contains(r, currentLocation)) startRegions.add(r.getId());
+        regionTransition.ignoreRegionsAtStart(startRegions);
+        session.setEtaMinutes(trip.getRemainingMinutes());
+        updatePrediction();
         replan();
         buildUi();
         render();
@@ -133,6 +162,7 @@ public final class MainActivity extends Activity {
         root.addView(dashboardBackButton, full());
         mode=label(16,ink); root.addView(mode);
         eta=label(64,ink); eta.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(eta);
+        routeStatus=label(18,ink); root.addView(routeStatus);
         topic=label(30,ink); topic.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(topic);
         details=label(18,ink); root.addView(details);
         discoveries=label(16,ink); root.addView(discoveries);
@@ -155,9 +185,13 @@ public final class MainActivity extends Activity {
         addGearButton(gears,"N",DriveSession.Gear.NEUTRAL); addGearButton(gears,"D",DriveSession.Gear.DRIVE);
         simulationPanel.addView(gears);
         LinearLayout etaControls=new LinearLayout(this);
-        Button less=button("ETA −5분"); less.setOnClickListener(v->{fake.setEta(session.etaMinutes()-5);replan();render();}); etaControls.addView(less,weight());
-        Button more=button("ETA +5분"); more.setOnClickListener(v->{fake.setEta(session.etaMinutes()+5);replan();render();}); etaControls.addView(more,weight()); simulationPanel.addView(etaControls);
+        Button less=button("ETA −5분"); less.setOnClickListener(v->{fake.setEta(session.etaMinutes()-5);updatePrediction();replan();render();}); etaControls.addView(less,weight());
+        Button more=button("ETA +5분"); more.setOnClickListener(v->{fake.setEta(session.etaMinutes()+5);updatePrediction();replan();render();}); etaControls.addView(more,weight()); simulationPanel.addView(etaControls);
         Button arrived=button("시뮬레이션 도착 토글"); arrived.setOnClickListener(v->{fake.markArrived(session.arrival()!=DriveSession.Arrival.ARRIVED);render();}); simulationPanel.addView(arrived,full());
+        List<Place> stops = fakeRoute.stops();
+        if (!stops.isEmpty()) addMoveButton(stops.get(0));
+        Button enter=button(enterButtonLabel()); enter.setOnClickListener(v->{Region target=entryTarget(); if(target!=null) onLocationChanged(null, fakeRoute.enterRegion(target));}); simulationPanel.addView(enter,full());
+        if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
@@ -213,6 +247,61 @@ public final class MainActivity extends Activity {
         render();
     }
 
+    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->onLocationChanged(null, fakeRoute.moveTo(stop)));simulationPanel.addView(b,full());}
+    private Region entryTarget(){
+        if (prediction != null) return prediction.getRegion();
+        for (Region r : regions) if (regionsWithContent.contains(r.getId())) return r;
+        return regions.isEmpty() ? null : regions.get(0);
+    }
+    private String enterButtonLabel(){Region r=entryTarget();return (r==null?"지역":r.getName())+" 진입";}
+    private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
+
+    /** Simulated location update; a Pleos FusedLocation/ProximityAlert adapter would call the same path. */
+    private void onLocationChanged(GeoPoint ignored, int remainingMinutes) {
+        currentLocation = fakeRoute.getLocation();
+        fake.setEta(remainingMinutes);
+        Region entered = RegionPredictor.regionAt(currentLocation, regions);
+        if (entered != null && regionTransition.onRegionEntered(entered.getId()) && !playbackActive && !playbackPaused) {
+            // Nothing is playing (not started, waiting for the region, or finished): switch now.
+            regionTransition.consumePendingSwitch();
+            startRegionSection(entered.getId());
+            replan();
+            render();
+            if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
+            return;
+        }
+        updatePrediction();
+        replan();
+        if (waitingForRegion && prediction == null && !playbackActive && !playbackPaused) {
+            // Passed the expected region without entering it: stop waiting and finish with the general queue.
+            waitingForRegion = false;
+            render();
+            if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
+            return;
+        }
+        render();
+    }
+    private void updatePrediction() {
+        if (regionTransition.enteredRegionId() != null) { prediction = null; return; }
+        prediction = RegionPredictor.predict(currentLocation, trip.getDestination().getLocation(), session.etaMinutes(), regions, regionsWithContent);
+    }
+    private void startRegionSection(String regionId) {
+        regionSectionId = regionId;
+        prediction = null;
+        waitingForRegion = false;
+        pendingAnnouncement = "지금 " + regionName(regionId) + "에 들어섰습니다. 이 지역과 연결된 이야기를 들려드릴게요.";
+    }
+    private String routeStatusText() {
+        String dest = "→ " + trip.getDestination().getName();
+        if (regionTransition.hasPendingSwitch()) return dest + "\n" + regionName(regionTransition.enteredRegionId()) + " 진입 · 지금 이야기가 끝나면 지역 브리핑으로 넘어가요";
+        if (regionSectionId != null) return dest + "\n" + regionName(regionSectionId) + " 구간 · 지역 브리핑";
+        if (prediction != null) {
+            String name = prediction.getRegion().getName();
+            if (waitingForRegion) return dest + "\n" + name + " 진입 대기 · 들어서면 지역 이야기를 이어서 들려드려요";
+            return dest + "\n" + name + " 경유 예상 · 약 " + prediction.getEstimatedMinutesToRegion() + "분 뒤 (직선 거리 기준 추정)";
+        }
+        return dest + "\n경유 예상 지역 없음";
+    }
     private void addGearButton(LinearLayout row,String title,DriveSession.Gear gear){Button b=button(title);b.setOnClickListener(v->{fake.setGear(gear);render();});row.addView(b,weight());}
     private TextView label(int size,int color){TextView v=new TextView(this);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,8,0,8);return v;}
     private Button button(String title){Button b=new Button(this);b.setText(title);return b;}
@@ -229,19 +318,20 @@ public final class MainActivity extends Activity {
         mode.setVisibility(driving?View.GONE:View.VISIBLE);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
-        eta.setText("시연 ETA " + session.etaMinutes()+"분"); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
+        eta.setText("목적지까지 " + session.etaMinutes()+"분");
+        routeStatus.setText(routeStatusText()); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
         details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
         discoveries.setText(discoveryText());
         discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
         playbackControls.setVisibility(driving?View.GONE:View.VISIBLE);
         debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
-        simulationPanel.setVisibility(driving?View.GONE:simulationPanel.getVisibility());
+        // Demo-only: an opened simulation panel stays available while driving so stops can be triggered in D.
         quizButton.setVisibility(driving?View.GONE:View.VISIBLE);
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
         quizButton.setEnabled(session.canStartQuiz());
         quizStatus.setText(session.canStartQuiz()?"목적지 도착 확인 · 정차 중 퀴즈 가능":"P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다.");
-        if (!playbackPaused && !playbackActive && playbackStatus != null && !"재생 완료".contentEquals(playbackStatus.getText()) && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
+        if (!playbackPaused && !playbackActive && !waitingForRegion && playbackStatus != null && !playbackStatus.getText().toString().startsWith("재생 완료") && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
         if(pauseButton!=null) pauseButton.setText(playbackPaused?"재개":"재생/일시정지");
     }
     private String discoveryText(){
@@ -256,7 +346,21 @@ public final class MainActivity extends Activity {
         }
         return text.toString();
     }
-    private void replan(){plan=planner.plan(session.etaMinutes(),segments,playedSegmentIds,java.util.Collections.emptySet());}
+    /** Replans unplayed segments for the current section, keeping a playing or paused segment at the head. */
+    private void replan(){
+        BriefingSegment current = null;
+        if (currentSegmentId != null && plan != null && !plan.getSegments().isEmpty() && plan.getSegments().get(0).getId().equals(currentSegmentId)) current = plan.getSegments().get(0);
+        Set<String> exclude = new HashSet<>(playedSegmentIds);
+        if (current != null) exclude.add(current.getId());
+        BriefingPlan next;
+        if (regionSectionId != null) next = planner.planRegion(session.etaMinutes(), regionSectionId, segments, exclude);
+        else if (prediction != null) next = planner.planBeforeRegion(prediction.getEstimatedMinutesToRegion(), segments, exclude, java.util.Collections.emptySet());
+        else next = planner.plan(session.etaMinutes(), segments, exclude, java.util.Collections.emptySet());
+        List<BriefingSegment> queue = new ArrayList<>();
+        if (current != null) queue.add(current);
+        queue.addAll(next.getSegments());
+        plan = new BriefingPlan(queue);
+    }
     private void advanceBriefing(boolean completed){
         if(plan==null||plan.getSegments().isEmpty())return;
         if(tts!=null) tts.stop();
@@ -264,15 +368,25 @@ public final class MainActivity extends Activity {
         if (completed) completedSegmentIds.add(previous.getId());
         playedSegmentIds.add(previous.getId());
         playbackActive=false; playbackPaused=false; currentSegmentId=null;
+        String switchTo = regionTransition.consumePendingSwitch();
+        if (switchTo != null) startRegionSection(switchTo);
+        else updatePrediction();
         replan();
+        if(!plan.getSegments().isEmpty()) { render(); speakCurrent(); return; }
+        if (regionSectionId == null && prediction != null) {
+            waitingForRegion = true;
+            playbackStatus.setText(prediction.getRegion().getName() + " 진입 대기");
+        } else playbackStatus.setText("재생 완료 · " + completedSegmentIds.size() + "개 항목 청취 기록");
         render();
-        if(!plan.getSegments().isEmpty()) speakCurrent(); else playbackStatus.setText("재생 완료 · " + completedSegmentIds.size() + "개 항목 청취 기록");
     }
     private void speakCurrent(){
-        if(!ttsReady||plan==null||plan.getSegments().isEmpty()) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
+        if(!ttsReady) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
+        if(plan==null||plan.getSegments().isEmpty()) { playbackStatus.setText(waitingForRegion?"지역 진입 대기 중":"남은 브리핑이 없습니다"); return; }
+        waitingForRegion=false;
         BriefingSegment segment=plan.getSegments().get(0);
         currentSegmentId=segment.getId();
         currentChunks=splitIntoChunks(segment.getScript());
+        if (pendingAnnouncement != null) { currentChunks.add(0, pendingAnnouncement); pendingAnnouncement = null; }
         chunkIndex=0;
         speakCurrentChunk();
     }
