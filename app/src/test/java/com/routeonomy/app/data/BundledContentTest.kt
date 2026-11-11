@@ -22,6 +22,8 @@ class BundledContentTest {
         assertEquals("서울역", trip.current.name)
         assertEquals("정자역", trip.destination.name)
         assertTrue(trip.remainingMinutes > 0)
+        val stops = RouteJsonParser.simulationStops(asset("demo_trip.json"))
+        assertEquals(listOf("판교 진입 직전", "정자역 근처"), stops.map { it.name })
     }
 
     @Test fun segmentsAreUniqueAndTimed() {

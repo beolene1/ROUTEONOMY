@@ -1,6 +1,6 @@
 [
-  {"id":"pangyo","name":"판교","latitude":37.3948,"longitude":127.1112,"radiusMeters":2000},
-  {"id":"dongtan","name":"동탄","latitude":37.2000,"longitude":127.0956,"radiusMeters":2500},
-  {"id":"namyangju","name":"남양주","latitude":37.6360,"longitude":127.2165,"radiusMeters":3000},
-  {"id":"hyehwa","name":"혜화역","latitude":37.5822,"longitude":127.0019,"radiusMeters":800}
+  {"id":"pangyo","name":"판교","latitude":37.40159,"longitude":127.10842,"radiusMeters":1650},
+  {"id":"dongtan","name":"동탄","latitude":37.19934,"longitude":127.09702,"radiusMeters":2000},
+  {"id":"namyangju","name":"남양주","latitude":37.65329,"longitude":127.24439,"radiusMeters":1500},
+  {"id":"hyehwa","name":"혜화역","latitude":37.58216,"longitude":127.00189,"radiusMeters":800}
 ]

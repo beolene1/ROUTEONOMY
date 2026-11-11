@@ -29,6 +29,12 @@ object RouteJsonParser {
         return TripContext(root.getJSONObject("origin").place(), root.getJSONObject("destination").place(), minutes)
     }
 
+    /** Demo-only positions the simulation panel can jump to, in route order. */
+    fun simulationStops(json: String): List<Place> {
+        val rows = JSONObject(json).optJSONArray("simulationStops") ?: return emptyList()
+        return (0 until rows.length()).map { index -> rows.getJSONObject(index).place() }
+    }
+
     private fun JSONObject.place() = Place(getString("name"), point())
 
     private fun JSONObject.point(): GeoPoint {

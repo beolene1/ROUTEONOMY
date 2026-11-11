@@ -1,5 +1,25 @@
 {
-  "origin":{"name":"서울역","latitude":37.5547,"longitude":126.9707},
-  "destination":{"name":"정자역","latitude":37.3670,"longitude":127.1085},
-  "remainingMinutes":30
+  "origin": {
+    "name": "서울역",
+    "latitude": 37.55594,
+    "longitude": 126.97233
+  },
+  "destination": {
+    "name": "정자역",
+    "latitude": 37.36676,
+    "longitude": 127.10827
+  },
+  "remainingMinutes": 30,
+  "simulationStops": [
+    {
+      "name": "판교 진입 직전",
+      "latitude": 37.41632,
+      "longitude": 127.09543
+    },
+    {
+      "name": "정자역 근처",
+      "latitude": 37.37126,
+      "longitude": 127.10829
+    }
+  ]
 }
