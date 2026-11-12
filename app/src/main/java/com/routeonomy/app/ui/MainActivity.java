@@ -18,6 +18,7 @@ import ai.pleos.playground.tts.listener.EventListener;
 import ai.pleos.playground.tts.listener.OnInitializeListener;
 import java.util.Locale;
 import com.routeonomy.app.R;
+import com.routeonomy.app.data.AssetQuizRepository;
 import com.routeonomy.app.data.AssetRouteRepository;
 import com.routeonomy.app.data.AssetSegmentRepository;
 import com.routeonomy.app.domain.BriefingPlan;
@@ -26,6 +27,8 @@ import com.routeonomy.app.domain.BriefingSegment;
 import com.routeonomy.app.domain.DriveSession;
 import com.routeonomy.app.domain.GeoPoint;
 import com.routeonomy.app.domain.Place;
+import com.routeonomy.app.domain.QuizQuestion;
+import com.routeonomy.app.domain.QuizSession;
 import com.routeonomy.app.domain.Region;
 import com.routeonomy.app.domain.RegionPrediction;
 import com.routeonomy.app.domain.RegionPredictor;
@@ -96,11 +99,20 @@ public final class MainActivity extends Activity {
     private String preferredFirstId;
     private LinearLayout demoMovePanel;
     private Button enterButton;
+    // Arrival quiz: null until started; dropped whenever P+ARRIVED no longer holds.
+    private List<QuizQuestion> quizQuestions;
+    private QuizSession quiz;
+    private boolean quizEmptyNotice;
+    private String renderedQuizKey;
+    private LinearLayout quizPanel, quizChoices;
+    private TextView quizQuestionText, quizFeedback;
+    private Button quizNextButton;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         fake = new FakeVehicleInput(session);
         segments = new AssetSegmentRepository(this).load();
+        quizQuestions = new AssetQuizRepository(this).load();
         for (BriefingSegment s : segments) if (s.getRegionId() != null) regionsWithContent.add(s.getRegionId());
         AssetRouteRepository routes = new AssetRouteRepository(this);
         regions = routes.regions();
@@ -239,7 +251,13 @@ public final class MainActivity extends Activity {
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
 
         quizStatus=label(18,ink); root.addView(quizStatus);
-        quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->quizStatus.setText("시연용 퀴즈 화면 · 문항/정답은 후속 구현")); root.addView(quizButton,full());
+        quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,full());
+        quizPanel=new LinearLayout(this); quizPanel.setOrientation(LinearLayout.VERTICAL);
+        quizQuestionText=label(22,ink); quizQuestionText.setTypeface(Typeface.DEFAULT,Typeface.BOLD); quizPanel.addView(quizQuestionText);
+        quizChoices=new LinearLayout(this); quizChoices.setOrientation(LinearLayout.VERTICAL); quizPanel.addView(quizChoices);
+        quizFeedback=label(18,ink); quizPanel.addView(quizFeedback);
+        quizNextButton=button("다음 문제"); quizNextButton.setOnClickListener(v->onQuizNext()); quizPanel.addView(quizNextButton,full());
+        quizPanel.setVisibility(View.GONE); root.addView(quizPanel);
         dashboard = new PreDriveDashboard(this, this::startDashboardBriefing,
                 this::changeDashboardTopic, () -> openTools(true), () -> openTools(false));
         dashboardScroll = new ScrollView(this);
@@ -382,12 +400,88 @@ public final class MainActivity extends Activity {
         Region target = entryTarget();
         enterButton.setText((target == null ? "지역" : target.getName()) + " 진입");
         enterButton.setEnabled(target != null);
-        quizButton.setVisibility(driving?View.GONE:View.VISIBLE);
+        boolean quizAllowed = session.canStartQuiz();
+        if (!quizAllowed) { quiz = null; quizEmptyNotice = false; } // left P or arrival was cleared: stop the quiz
+        quizButton.setVisibility(driving || quiz != null ? View.GONE : View.VISIBLE);
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
-        quizButton.setEnabled(session.canStartQuiz());
-        quizStatus.setText(session.canStartQuiz()?"목적지 도착 확인 · 정차 중 퀴즈 가능":"P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다.");
+        quizButton.setEnabled(quizAllowed);
+        if (quiz == null) quizStatus.setText(!quizAllowed ? "P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다."
+                : quizEmptyNotice ? "아직 끝까지 들은 브리핑이 없어 풀 수 있는 퀴즈가 없습니다." : "목적지 도착 확인 · 정차 중 퀴즈 가능");
+        renderQuiz();
         if (!playbackPaused && !playbackActive && !waitingForRegion && playbackStatus != null && !playbackStatus.getText().toString().startsWith("재생 완료") && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
         if(pauseButton!=null) pauseButton.setText(playbackPaused?"재개":"재생/일시정지");
+    }
+    private void startQuiz(){
+        if (!session.canStartQuiz()) return;
+        QuizSession next = QuizSession.fromCompleted(quizQuestions, completedSegmentIds);
+        if (next.isEmpty()) {
+            quiz = null;
+            quizEmptyNotice = true;
+            render();
+            return;
+        }
+        quiz = next;
+        quizEmptyNotice = false;
+        quizStatus.setText("오늘 들은 브리핑 퀴즈 · " + quiz.total() + "문제");
+        render();
+        // Scroll once the panel has been laid out, so the target offset is current.
+        briefingScroll.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                briefingScroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                briefingScroll.smoothScrollTo(0, quizStatus.getTop());
+            }
+        });
+    }
+    private void onQuizAnswer(int choice){
+        if (quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
+        quiz.answer(choice);
+        renderQuiz();
+    }
+    private void onQuizNext(){
+        if (quiz == null) return;
+        if (quiz.isFinished()) quiz.restart();
+        else if (quiz.isAnswered()) quiz.next();
+        renderQuiz();
+    }
+    private void renderQuiz(){
+        quizPanel.setVisibility(quiz == null ? View.GONE : View.VISIBLE);
+        // render() runs on many unrelated events; rebuild the choices only when the quiz state changed.
+        String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice();
+        if (java.util.Objects.equals(key, renderedQuizKey)) return;
+        renderedQuizKey = key;
+        quizChoices.removeAllViews();
+        if (quiz == null) return;
+        if (quiz.isFinished()) {
+            quizQuestionText.setText("퀴즈 결과 · " + quiz.total() + "문제 중 " + quiz.score() + "개 정답");
+            quizFeedback.setText(quiz.score() == quiz.total() ? "모두 맞혔어요! 오늘 브리핑을 잘 기억하고 계시네요." : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.");
+            quizNextButton.setText("다시 풀기");
+            quizNextButton.setVisibility(View.VISIBLE);
+            return;
+        }
+        QuizQuestion question = quiz.current();
+        quizQuestionText.setText("문제 " + (quiz.position() + 1) + "/" + quiz.total() + "\n" + question.getQuestion());
+        Integer selected = quiz.selectedChoice();
+        List<String> choices = question.getChoices();
+        for (int i = 0; i < choices.size(); i++) {
+            final int choice = i;
+            String mark = "";
+            if (selected != null && i == question.getAnswerIndex()) mark = "✓ ";
+            else if (selected != null && i == selected) mark = "✗ ";
+            Button b = button(mark + (i + 1) + ". " + choices.get(i));
+            b.setAllCaps(false);
+            b.setEnabled(selected == null);
+            b.setOnClickListener(v -> onQuizAnswer(choice));
+            quizChoices.addView(b, full());
+        }
+        if (selected == null) {
+            quizFeedback.setText("");
+            quizNextButton.setVisibility(View.GONE);
+        } else {
+            boolean correct = selected == question.getAnswerIndex();
+            quizFeedback.setText((correct ? "정답입니다!" : "아쉬워요. 정답은 " + (question.getAnswerIndex() + 1) + "번입니다.") + "\n" + question.getExplanation());
+            quizNextButton.setText(quiz.position() + 1 < quiz.total() ? "다음 문제" : "결과 보기");
+            quizNextButton.setVisibility(View.VISIBLE);
+        }
     }
     private String discoveryText(){
         List<BriefingSegment> heard = TodayDiscoveries.from(segments, completedSegmentIds);
@@ -424,7 +518,7 @@ public final class MainActivity extends Activity {
         if(plan==null||plan.getSegments().isEmpty())return;
         if(tts!=null) tts.stop();
         BriefingSegment previous=plan.getSegments().get(0);
-        if (completed) completedSegmentIds.add(previous.getId());
+        if (completed) { completedSegmentIds.add(previous.getId()); quizEmptyNotice = false; }
         playedSegmentIds.add(previous.getId());
         playbackActive=false; playbackPaused=false; currentSegmentId=null;
         String switchTo = regionTransition.consumePendingSwitch();
