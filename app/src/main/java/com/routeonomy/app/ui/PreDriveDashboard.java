@@ -2,7 +2,6 @@ package com.routeonomy.app.ui;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -17,14 +16,14 @@ import com.routeonomy.app.domain.BriefingSegment;
 import java.time.LocalDate;
 
 final class PreDriveDashboard extends LinearLayout {
-    private static final int BACKGROUND = 0xfff4f5ef;
-    private static final int INK = 0xff151815;
-    private static final int MUTED = 0xff5f665e;
-    private static final int NEUTRAL = 0xffe7e7e0;
-    private static final int GREEN = 0xff256a49;
-    private static final int MINT = 0xffd7ebe0;
+    private static final int BACKGROUND = UiStyle.BACKGROUND;
+    private static final int INK = UiStyle.INK;
+    private static final int MUTED = UiStyle.MUTED;
+    private static final int NEUTRAL = UiStyle.NEUTRAL;
+    private static final int GREEN = UiStyle.GREEN;
+    private static final int MINT = UiStyle.MINT;
 
-    private final float scale;
+    private final UiStyle style;
     private final boolean narrow;
     private final TextView topic;
     private final TextView description;
@@ -37,7 +36,7 @@ final class PreDriveDashboard extends LinearLayout {
             Runnable onSettings, Runnable onFeatures) {
         super(context);
         narrow = windowWidth > 0 && windowWidth < 640;
-        scale = windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f;
+        style = new UiStyle(context, windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f);
         setOrientation(VERTICAL);
         setBackgroundColor(BACKGROUND);
         setPadding(size(narrow ? 24 : 49), size(40), size(narrow ? 24 : 49), size(48));
@@ -106,7 +105,7 @@ final class PreDriveDashboard extends LinearLayout {
     private LinearLayout header() {
         LinearLayout header = row();
         View logo = new View(getContext());
-        logo.setBackground(shape(0xff6c9181, 5));
+        logo.setBackground(shape(UiStyle.LOGO, 5));
         header.addView(logo, new LayoutParams(size(34), size(34)));
         TextView brand = text("ROUTEONOMY", 20, MUTED, false);
         LayoutParams brandParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
@@ -228,19 +227,7 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private void configureAction(View view, Runnable click) {
-        android.util.TypedValue value = new android.util.TypedValue();
-        if (getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, value, true)) {
-            view.setForeground(getContext().getDrawable(value.resourceId));
-        }
-        view.setFocusable(true);
-        view.setOnClickListener(v -> click.run());
-        view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
-            @Override public void onInitializeAccessibilityNodeInfo(
-                    View host, android.view.accessibility.AccessibilityNodeInfo info) {
-                super.onInitializeAccessibilityNodeInfo(host, info);
-                info.setClassName(android.widget.Button.class.getName());
-            }
-        });
+        style.clickable(view, click);
     }
 
     private View gridIcon() {
@@ -261,15 +248,11 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private TextView pill(String label, int color, int fill, int textSize) {
-        TextView pill = text(label, textSize, color, false);
-        pill.setPadding(size(10), size(4), size(10), size(4));
-        pill.setBackground(shape(fill, 17));
-        return pill;
+        return style.pill(label, color, fill, textSize);
     }
 
     private void styleCard(View card) {
-        card.setBackground(shape(Color.WHITE, 14));
-        card.setElevation(size(3));
+        style.card(card);
     }
 
     private ImageView picture(int resource) {
@@ -285,13 +268,7 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
-        TextView text = new TextView(getContext());
-        text.setText(value);
-        text.setTextSize(Math.max(11, size * scale));
-        text.setTextColor(color);
-        text.setIncludeFontPadding(false);
-        text.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
-        return text;
+        return style.text(value, size, color, bold);
     }
 
     private LinearLayout row() {
@@ -314,13 +291,10 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private GradientDrawable shape(int color, int radius) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(size(radius));
-        return drawable;
+        return style.shape(color, radius);
     }
 
     private int size(float dp) {
-        return Math.round(dp * scale * getResources().getDisplayMetrics().density);
+        return style.size(dp);
     }
 }
