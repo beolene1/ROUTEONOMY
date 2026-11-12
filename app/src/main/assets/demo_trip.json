@@ -21,5 +21,98 @@
       "latitude": 37.27746,
       "longitude": 127.11584
     }
+  ],
+  "routeNote": "Demo route: rough highway corridor through Pangyo, not a navi route. Same points as tools/demo-route.gpx.",
+  "route": [
+    {
+      "name": "서울역",
+      "latitude": 37.55594,
+      "longitude": 126.97233
+    },
+    {
+      "name": "숙대입구",
+      "latitude": 37.5448,
+      "longitude": 126.9727
+    },
+    {
+      "name": "한남",
+      "latitude": 37.5345,
+      "longitude": 127.007
+    },
+    {
+      "name": "한남대교 남단",
+      "latitude": 37.521,
+      "longitude": 127.019
+    },
+    {
+      "name": "반포IC",
+      "latitude": 37.505,
+      "longitude": 127.024
+    },
+    {
+      "name": "서초IC",
+      "latitude": 37.488,
+      "longitude": 127.029
+    },
+    {
+      "name": "양재IC",
+      "latitude": 37.469,
+      "longitude": 127.039
+    },
+    {
+      "name": "달래내고개",
+      "latitude": 37.44,
+      "longitude": 127.07
+    },
+    {
+      "name": "판교 진입 직전",
+      "latitude": 37.41632,
+      "longitude": 127.09543
+    },
+    {
+      "name": "판교테크노밸리",
+      "latitude": 37.40159,
+      "longitude": 127.10842
+    },
+    {
+      "name": "판교 남쪽",
+      "latitude": 37.385,
+      "longitude": 127.112
+    },
+    {
+      "name": "정자역",
+      "latitude": 37.36676,
+      "longitude": 127.10827
+    },
+    {
+      "name": "미금역",
+      "latitude": 37.35,
+      "longitude": 127.109
+    },
+    {
+      "name": "오리역",
+      "latitude": 37.3399,
+      "longitude": 127.109
+    },
+    {
+      "name": "죽전역",
+      "latitude": 37.3246,
+      "longitude": 127.1074
+    },
+    {
+      "name": "보정역",
+      "latitude": 37.3127,
+      "longitude": 127.1082
+    },
+    {
+      "name": "구성역",
+      "latitude": 37.299,
+      "longitude": 127.1056
+    },
+    {
+      "name": "기흥역",
+      "latitude": 37.27566,
+      "longitude": 127.11595
+    }
   ]
 }

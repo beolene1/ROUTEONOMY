@@ -35,6 +35,13 @@ object RouteJsonParser {
         return (0 until rows.length()).map { index -> rows.getJSONObject(index).place() }
     }
 
+    /** Demo route line for the in-app route panel and the GPX playback file; origin→destination if absent. */
+    fun routePoints(json: String): List<GeoPoint> {
+        val rows = JSONObject(json).optJSONArray("route")
+        if (rows == null || rows.length() < 2) trip(json).let { return listOf(it.current.location, it.destination.location) }
+        return (0 until rows.length()).map { index -> rows.getJSONObject(index).point() }
+    }
+
     private fun JSONObject.place() = Place(getString("name"), point())
 
     private fun JSONObject.point(): GeoPoint {

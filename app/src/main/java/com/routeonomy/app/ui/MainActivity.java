@@ -98,6 +98,11 @@ public final class MainActivity extends Activity {
     private GeoPoint lastRealFix;
     private String lastAlert;
     private TextView locationStatus;
+    private List<GeoPoint> routePoints;
+    private RouteMapView routeMap;
+    private LinearLayout screen;
+    private FrameLayout appArea;
+    private int dashboardWidthDp = -1;
     private RegionPrediction prediction;
     private String regionSectionId;
     private String pendingAnnouncement;
@@ -125,6 +130,7 @@ public final class MainActivity extends Activity {
         regions = routes.regions();
         trip = routes.demoTrip();
         fakeRoute = new FakeRouteInput(trip, routes.simulationStops());
+        routePoints = routes.routePoints();
         currentLocation = trip.getCurrent().getLocation();
         List<Geofence> fences = new ArrayList<>();
         for (Region r : regions) fences.add(Geofence.of(r));
@@ -274,16 +280,45 @@ public final class MainActivity extends Activity {
         quizFeedback=label(18,ink); quizPanel.addView(quizFeedback);
         quizNextButton=button("다음 문제"); quizNextButton.setOnClickListener(v->onQuizNext()); quizPanel.addView(quizNextButton,full());
         quizPanel.setVisibility(View.GONE); root.addView(quizPanel);
-        dashboard = new PreDriveDashboard(this, this::startDashboardBriefing,
-                this::changeDashboardTopic, () -> openTools(true), () -> openTools(false));
         dashboardScroll = new ScrollView(this);
         dashboardScroll.setFillViewport(true);
-        dashboardScroll.addView(dashboard);
 
-        FrameLayout screen = new FrameLayout(this);
-        screen.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
-        screen.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
+        appArea = new FrameLayout(this);
+        appArea.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
+        appArea.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
+        routeMap = new RouteMapView(this);
+        routeMap.setRoute(routePoints, trip.getCurrent(), trip.getDestination(), regions);
+        screen = new LinearLayout(this);
+        applyLayout();
         setContentView(screen);
+    }
+
+    private static final int WIDE_WINDOW_DP = 1200;
+    private static final float MAP_SHARE = 0.45f;
+    /** Full window: route panel left, app right. Narrower (e.g. half split): route panel on top. */
+    private void applyLayout() {
+        int widthDp = getResources().getConfiguration().screenWidthDp;
+        boolean wide = widthDp >= WIDE_WINDOW_DP;
+        screen.removeAllViews();
+        screen.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        if (wide) {
+            screen.addView(routeMap, new LinearLayout.LayoutParams(0, -1, MAP_SHARE));
+            screen.addView(appArea, new LinearLayout.LayoutParams(0, -1, 1 - MAP_SHARE));
+        } else {
+            int mapHeight = Math.round(400 * getResources().getDisplayMetrics().density);
+            screen.addView(routeMap, new LinearLayout.LayoutParams(-1, mapHeight));
+            screen.addView(appArea, new LinearLayout.LayoutParams(-1, 0, 1));
+        }
+        int appWidthDp = wide ? Math.round(widthDp * (1 - MAP_SHARE)) : widthDp;
+        if (appWidthDp == dashboardWidthDp) return;
+        // The dashboard sizes itself once at construction; rebuild it for the new column width.
+        dashboardWidthDp = appWidthDp;
+        dashboardScroll.removeAllViews();
+        dashboard = new PreDriveDashboard(this, appWidthDp, this::startDashboardBriefing,
+                this::changeDashboardTopic, () -> openTools(true), () -> openTools(false));
+        dashboardScroll.addView(dashboard);
+        CharSequence status = playbackStatus.getText();
+        if (!ttsReady && status.toString().startsWith("Pleos")) dashboard.showStatus(status); // keep a TTS failure notice
     }
 
     private void openTools(boolean showSimulation) {
@@ -432,7 +467,13 @@ public final class MainActivity extends Activity {
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
         eta.setText("목적지까지 " + session.etaMinutes()+"분");
-        routeStatus.setText(routeStatusText());
+        String route = routeStatusText();
+        routeStatus.setText(route);
+        String mapRegion = regionTransition.enteredRegionId() != null ? regionTransition.enteredRegionId()
+                : prediction != null ? prediction.getRegion().getId() : null;
+        routeMap.setState(currentLocation, mapRegion, regionTransition.enteredRegionId() != null,
+                route.substring(route.indexOf('\n') + 1),
+                locationSourceStatus + " · " + trip.getDestination().getName() + "까지 " + session.etaMinutes() + "분");
         locationStatus.setText(locationStatusText());
         locationStatus.setVisibility(driving?View.GONE:View.VISIBLE);
         topic.setText(current == null ? "브리핑 없음" : current.getTopic());
@@ -653,6 +694,8 @@ public final class MainActivity extends Activity {
     /** Window resized/moved (Pleos window bar): the activity is kept; log the new window for the experiment. */
     @Override public void onConfigurationChanged(android.content.res.Configuration config) {
         super.onConfigurationChanged(config);
+        applyLayout();
+        render();
         if (naviProbe != null) naviProbe.note("창 변경: " + config.screenWidthDp + "x" + config.screenHeightDp + "dp, 멀티윈도우=" + isInMultiWindowMode());
     }
     @Override public void onMultiWindowModeChanged(boolean inMultiWindow, android.content.res.Configuration config) {

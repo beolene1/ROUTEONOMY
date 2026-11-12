@@ -1,7 +1,10 @@
 package com.routeonomy.app.data
 
 import com.routeonomy.app.domain.BriefingSegment
+import com.routeonomy.app.domain.GeoMath
+import com.routeonomy.app.domain.GeoPoint
 import com.routeonomy.app.domain.Geofence
+import com.routeonomy.app.domain.GeofenceGate
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -31,6 +34,28 @@ class BundledContentTest {
         // The last stop doubles as the simulated arrival, so it must sit inside the arrival radius.
         assertTrue(Geofence.arrival(trip.destination).contains(stops.last().location))
         assertTrue(!Geofence.arrival(trip.destination).contains(stops.first().location))
+    }
+
+    @Test fun demoRouteRunsFromOriginToDestinationThroughPangyoOnly() {
+        val route = RouteJsonParser.routePoints(asset("demo_trip.json"))
+        assertEquals(trip.current.location, route.first())
+        assertEquals(trip.destination.location, route.last())
+        val fences = regions.map(Geofence::of)
+        val gate = GeofenceGate(fences)
+        // Walk the route in ~100 m steps, as GPX playback would, and collect region entries.
+        val entered = mutableListOf<String>()
+        route.zipWithNext().forEach { (a, b) ->
+            val steps = (GeoMath.distanceMeters(a, b) / 100).toInt().coerceAtLeast(1)
+            for (i in 0..steps) {
+                val t = i.toDouble() / steps
+                val p = GeoPoint(a.latitude + (b.latitude - a.latitude) * t, a.longitude + (b.longitude - a.longitude) * t)
+                gate.onLocation(p).filter { it.entered }.forEach { entered += it.id }
+            }
+        }
+        assertEquals(listOf("pangyo"), entered)
+        // The general briefing needs time before Pangyo: entry should be well into the route.
+        val pangyo = regions.first { it.id == "pangyo" }
+        assertTrue(GeoMath.distanceMeters(route.first(), pangyo.center) > 15_000)
     }
 
     @Test fun segmentsAreUniqueAndTimed() {

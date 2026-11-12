@@ -32,10 +32,10 @@ final class PreDriveDashboard extends LinearLayout {
     private final TextView startButton;
     private final TextView changeButton;
 
-    PreDriveDashboard(Context context, Runnable onStart, Runnable onChange,
+    /** @param windowWidth width in dp of the column the dashboard is shown in (not the whole window). */
+    PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onChange,
             Runnable onSettings, Runnable onFeatures) {
         super(context);
-        int windowWidth = getResources().getConfiguration().screenWidthDp;
         narrow = windowWidth > 0 && windowWidth < 640;
         scale = windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f;
         setOrientation(VERTICAL);
