@@ -290,7 +290,7 @@ public final class MainActivity extends Activity {
         dashboardWidthDp = appWidthDp;
         dashboardScroll.removeAllViews();
         dashboard = new PreDriveDashboard(this, appWidthDp, this::startDashboardBriefing,
-                this::changeDashboardTopic, () -> openTools(true), () -> openTools(false));
+                () -> shiftDashboardTopic(1), () -> shiftDashboardTopic(-1), () -> openTools(true), () -> openTools(false));
         dashboardScroll.addView(dashboard);
         CharSequence status = playbackStatus.getText();
         if (!ttsReady && status.toString().startsWith("Pleos")) dashboard.showStatus(status); // keep a TTS failure notice
@@ -397,18 +397,24 @@ public final class MainActivity extends Activity {
         return false;
     }
 
-    private void changeDashboardTopic() {
+    /** MAIN topics of the current plan in content order: the pages of the dashboard topic banner. */
+    private List<BriefingSegment> dashboardTopics() {
+        List<BriefingSegment> topics = new ArrayList<>();
+        for (BriefingSegment s : segments) if (s.getType() == BriefingSegment.Type.MAIN && plan.getSegments().contains(s)) topics.add(s);
+        return topics;
+    }
+
+    /** Banner swipe / Change topic: brings the next (+1) or previous (-1) topic to the front of the plan. */
+    private void shiftDashboardTopic(int delta) {
         if (!canChangeDashboardTopic()) return;
+        List<BriefingSegment> topics = dashboardTopics();
+        int index = Math.max(0, topics.indexOf(plan.getSegments().get(0)));
+        BriefingSegment next = topics.get(Math.floorMod(index + delta, topics.size()));
         List<BriefingSegment> reordered = new ArrayList<>(plan.getSegments());
-        BriefingSegment first = reordered.remove(0);
-        int nextNonTopic = 0;
-        while (nextNonTopic < reordered.size()
-                && reordered.get(nextNonTopic).getType() == BriefingSegment.Type.MAIN) {
-            nextNonTopic++;
-        }
-        reordered.add(nextNonTopic, first);
+        reordered.remove(next);
+        reordered.add(0, next);
         plan = new BriefingPlan(reordered);
-        preferredFirstId = reordered.get(0).getId();
+        preferredFirstId = next.getId();
         render();
     }
 
@@ -522,7 +528,8 @@ public final class MainActivity extends Activity {
         briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
         nowPlaying.setDriving(driving);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
-        dashboard.bindTopic(current, canChangeDashboardTopic());
+        List<BriefingSegment> topics = dashboardTopics();
+        dashboard.bindTopic(current, canChangeDashboardTopic(), Math.max(0, topics.indexOf(current)), topics.size());
         String route = routeStatusText();
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute

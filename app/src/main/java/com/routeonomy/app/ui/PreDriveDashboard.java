@@ -29,11 +29,18 @@ final class PreDriveDashboard extends LinearLayout {
     private final TextView status;
     private final TextView startButton;
     private final TextView changeButton;
+    private final LinearLayout learning;
+    private final LinearLayout dots;
+    private final Runnable onNext;
+    private final Runnable onPrevious;
+    private boolean canChangeTopic;
 
     /** @param windowWidth width in dp of the column the dashboard is shown in (not the whole window). */
-    PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onChange,
+    PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onNext, Runnable onPrevious,
             Runnable onSettings, Runnable onFeatures) {
         super(context);
+        this.onNext = onNext;
+        this.onPrevious = onPrevious;
         narrow = windowWidth > 0 && windowWidth < 640;
         style = new UiStyle(context, windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f);
         setOrientation(VERTICAL);
@@ -46,7 +53,7 @@ final class PreDriveDashboard extends LinearLayout {
         addMarketRows();
         addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"), rowParams(28));
 
-        LinearLayout learning = row();
+        learning = row();
         styleCard(learning);
         learning.setPadding(size(15), size(11), size(15), size(11));
         FrameLayout thumbnail = new FrameLayout(context);
@@ -67,9 +74,14 @@ final class PreDriveDashboard extends LinearLayout {
         copyParams.setMarginStart(size(14));
         learning.addView(copy, copyParams);
         addView(learning, rowParams(10));
+        enableSwipe(learning);
+        dots = row();
+        dots.setGravity(Gravity.CENTER);
+        dots.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        addView(dots, rowParams(10));
 
         LinearLayout actions = row();
-        changeButton = action("Change topic", MUTED, NEUTRAL, onChange);
+        changeButton = action("Change topic", MUTED, NEUTRAL, () -> slide(1));
         startButton = action("Start today’s learning", Color.WHITE, GREEN, onStart);
         actions.addView(changeButton, new LayoutParams(0, size(49), 1f));
         LayoutParams startParams = new LayoutParams(0, size(49), 2f);
@@ -85,7 +97,10 @@ final class PreDriveDashboard extends LinearLayout {
         addView(status, rowParams(8));
     }
 
-    void bindTopic(BriefingSegment segment, boolean canChangeTopic) {
+    /** @param position index of the shown topic among [count] swipeable topics (dots); count 0 hides them. */
+    void bindTopic(BriefingSegment segment, boolean canChangeTopic, int position, int count) {
+        this.canChangeTopic = canChangeTopic;
+        bindDots(position, count);
         topic.setText(segment == null ? "브리핑 없음" : segment.getTopic());
         description.setText(segment == null ? "" : "★  " + segment.getTerm().getName()
                 + " · " + segment.getTerm().getExplanation());
@@ -94,6 +109,66 @@ final class PreDriveDashboard extends LinearLayout {
         startButton.setAlpha(segment == null ? 0.5f : 1f);
         changeButton.setEnabled(canChangeTopic);
         changeButton.setAlpha(canChangeTopic ? 1f : 0.55f);
+    }
+
+    private void bindDots(int position, int count) {
+        dots.removeAllViews();
+        dots.setVisibility(count > 1 ? VISIBLE : GONE);
+        for (int i = 0; i < count && count > 1; i++) {
+            View dot = new View(getContext());
+            boolean on = i == position;
+            dot.setBackground(shape(on ? GREEN : NEUTRAL, 4));
+            LayoutParams params = new LayoutParams(size(on ? 22 : 8), size(8));
+            if (i > 0) params.setMarginStart(size(6));
+            dots.addView(dot, params);
+        }
+    }
+
+    /** Banner-style change: the card slides out, the topic changes, the new card slides in. */
+    private void slide(int direction) {
+        if (!canChangeTopic) return;
+        float distance = learning.getWidth() > 0 ? learning.getWidth() : size(400);
+        learning.animate().cancel();
+        learning.animate().translationX(-direction * distance).alpha(0f).setDuration(160).withEndAction(() -> {
+            (direction > 0 ? onNext : onPrevious).run();
+            learning.setTranslationX(direction * distance);
+            learning.animate().translationX(0f).alpha(1f).setDuration(160).start();
+        }).start();
+    }
+
+    /** Horizontal drag on the topic card: past a threshold it changes topic, otherwise it snaps back. */
+    private void enableSwipe(View card) {
+        final int slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        final float[] start = new float[2];
+        final boolean[] dragging = new boolean[1];
+        card.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    start[0] = event.getRawX();
+                    start[1] = event.getRawY();
+                    dragging[0] = false;
+                    return true;
+                case android.view.MotionEvent.ACTION_MOVE: {
+                    float dx = event.getRawX() - start[0], dy = event.getRawY() - start[1];
+                    if (!dragging[0] && canChangeTopic && Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy)) {
+                        dragging[0] = true;
+                        view.getParent().requestDisallowInterceptTouchEvent(true); // keep the vertical scroll out
+                    }
+                    if (dragging[0]) view.setTranslationX(dx * 0.6f);
+                    return true;
+                }
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL: {
+                    float dx = event.getRawX() - start[0];
+                    if (dragging[0] && Math.abs(dx) > size(80)) slide(dx < 0 ? 1 : -1);
+                    else view.animate().translationX(0f).setDuration(120).start();
+                    dragging[0] = false;
+                    return true;
+                }
+                default:
+                    return false;
+            }
+        });
     }
 
     void showStatus(CharSequence message) {
