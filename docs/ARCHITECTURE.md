@@ -7,7 +7,7 @@
 `ui -> domain`; `data -> domain`; `pleos -> domain`; `simulation -> domain`. 조립 지점인 앱 진입점만 각 구현체를 연결한다. Domain은 Android, UI, JSON 라이브러리, Pleos SDK를 참조하지 않는다. UI는 Pleos SDK를 직접 호출하지 않는다.
 
 ## 핵심 계약
-Domain 경계의 계약은 기어/경로·구간 시간/지역 진입/도착 관찰 입력, `SegmentRepository`, `BriefingPlanner`, `SessionController`, `SpeechOutput`, `QuizPolicy`로 작게 유지한다. 실제 구현과 Fake 구현은 같은 입력·출력 의미를 가져야 한다. Pleos SDK에서 확인되지 않은 도착 API는 만들지 않고, 도착은 별도 계약의 Fake 입력으로 둔다.
+Domain 경계의 계약은 기어/경로·구간 시간/지역 진입/도착 관찰 입력, `SegmentRepository`, `BriefingPlanner`, `SessionController`, `SpeechOutput`, `QuizPolicy`로 작게 유지한다. 실제 구현과 Fake 구현은 같은 입력·출력 의미를 가져야 한다. 도착은 목적지 반경(300m) 진입으로 판정한다. 내비 `onDestinationArrived`는 AVD에서 유도할 수 없어 쓰지 않는다. Fake 도착 토글은 백업으로 남긴다.
 
 ### 더미 경로에서 실제 SDK로의 교체
 경로 판단 입력은 domain의 계약(현재 위치 좌표, 목적지 좌표, 목적지까지 남은 시간, 지역 진입 이벤트)으로만 들어온다. 거리 계산, 경유 예측(우회 비율·후보 제외·선택), 반경 진입 판정, 구간별 계획은 domain의 순수 함수로 구현하고 단위 테스트한다. 즉 판단 로직은 실제 코드이며 더미인 것은 입력뿐이다. MVP는 `simulation`의 더미 구현(로컬 JSON 좌표·남은 시간, 위치 이동 버튼 3개)을 쓰고, 이후 `pleos` 어댑터가 같은 계약을 구현한다. 앱 진입점에서 구현체만 바꾸며 domain·ui는 수정하지 않는 것을 목표로 한다. 별도 Gradle 모듈은 만들지 않는다.
@@ -15,11 +15,17 @@ Domain 경계의 계약은 기어/경로·구간 시간/지역 진입/도착 관
 실제 입력 후보는 NaviHelper 3.0.5 / navi-data 3.0.4 소스 KDoc과 공식 문서(document.pleos.ai, 2026-11-11 확인)에서 찾은 것이며, **AVD·실차 동작은 미검증**이다. 지도·경로 API는 Pleos로 한정한다.
 - 경로 선형(polyline)이나 구간별 소요 시간을 주는 API는 소스와 문서 어디에도 없다. 그래서 출발 시에는 좌표로 경유를 예측만 하고, A는 조각 단위로 이어 가며, B는 진입 순간의 남은 시간으로 계획한다.
 - 목적지 좌표·남은 시간: `getDestinationInfo` → `DestinationInfo(latitude, longitude, remainTime(초), remainDistance(m))`.
-- 현재 위치: FusedLocation `registerFusedLocationCallback`(`LocationData(latitude, longitude, …)`) 또는 NaviHelper `onCurrentLocationInfo`.
+- **구현됨(2026-11-12):** 현재 위치·지역 진입·도착은 `pleos/FusedLocationSource`(FusedLocation 1.1.3)가 받는다. AVD에서 GPX 재생을 따라가고 ENTER/EXIT가 오는 것을 실험으로 확인했다. 제품 연결의 AVD 확인은 리허설에서 한다.
+  - 위치 고정(약 3초 간격)과 근접 알림을 `domain/GeofenceGate`가 진입·이탈로 바꾼다. 같은 통과가 두 경로로 와도 한 번만 반영한다. 첫 실제 위치를 시작점으로 삼아, 반경 밖 위치를 한 번 본 뒤의 진입만 인정한다(등록 직후 알림 무시).
+  - 시뮬레이션 버튼도 같은 `applyLocation` 경로를 쓴다.
+  - 남은 시간은 `RemainingTimeEstimator`가 목적지까지 남은 직선거리에 비례해 추정한다. AVD에서 내비 `remainTime`이 고정이기 때문이다.
+  - 도착은 목적지 반경 진입으로 처리하고, 한 번 처리되면 유지한다.
+  - 경로 그림은 `ui/RouteMapView`가 `demo_trip.json`의 `route` 좌표(`tools/demo-route.gpx`와 같은 좌표)로 직접 그린다. 지도 타일과 네트워크는 쓰지 않는다.
+- 현재 위치 다른 후보: NaviHelper `onCurrentLocationInfo`. AVD에서 내비 위치가 고정이라 쓰지 않는다.
 - 지역 진입: 후보 전체에 FusedLocation `addProximityAlert(ProximityAlertRequest(latitude, longitude, radiusMeters, transitionTypes), ProximityAlertListener)` → `ProximityAlertEvent(alertId, transition)`. 문서 설명은 '지정 영역과 전이에 대한 근접 알림'이다. 권한 `pleos.car.permission.FUSED_LOCATION`.
 - 정확도 보강 후보: `requestTrip(TripRequest(지역 좌표…))` → `onTripInfo(TripInfo.eta(초))`. 문서 설명이 'Requests trip.'뿐이라 활성 경로를 바꾸는지 AVD 확인 전에는 쓰지 않는다.
 - 쓰지 않는 것: `addWaypoint`. 사용자 내비 경로에 경유지가 실제로 추가되고, 내비 정책은 사용자 동의 없는 자동 경로 전환을 금지한다.
-- 목적지 도착: `onDestinationArrived`. 퀴즈 허용 조건(`ARRIVED`)의 실제 입력 후보다.
+- 목적지 도착: `onDestinationArrived`는 실차 후보다. AVD에서는 목적지 근접 알림으로 대체한다.
 
 ## 데이터 및 상태 흐름
 로컬 JSON(세그먼트·지역 후보·시연 주행) -> data 매퍼 -> domain 모델 -> 경유 예측(표시) -> A 플래너 / 진입 시 B 플래너 -> 세션 재생 큐 -> TTS. Pleos와 Fake 어댑터는 각각 차량 맥락 이벤트를 domain 명령으로 변환한다. 상태는 `gearMode`, `arrivalStatus`, 경로 구간 상태(A: 지역 진입 전 / B: 진입한 지역 ID와 전환 대기 여부)를 서로 독립적으로 관리한다. 구간 상태는 지역 진입 입력으로만 A에서 B로 바뀌며 기어나 도착으로 바뀌지 않는다. P 진입은 주차 UI를 열 뿐 도착으로 바꾸지 않는다. `ARRIVED`일 때만 퀴즈를 허용한다.
