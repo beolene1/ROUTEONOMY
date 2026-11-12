@@ -1,154 +1,64 @@
-<div align="center">
+# Routeonomy
 
-# ROUTEONOMY
+**출퇴근길에 듣는, 남은 시간과 지나가는 지역에 맞춘 경제 브리핑.**
 
-### 목적지까지의 경로를 넘어, 세상을 이해하는 경로로.
+자가용으로 출퇴근하는 직장인을 위한 Pleos Connect 차량용 앱입니다. 목적지까지 남은 시간에 맞춰 산업·경제 이야기를 들려주고, 지나가는 지역에 맞춰 주제를 바꿉니다. 도착해서 주차하면 오늘 들은 이야기를 돌아보고 퀴즈를 풀 수 있습니다.
 
-출퇴근 시간을 남은 시간과 이동 경로에 맞춘 오디오 브리핑으로 채우는
-Pleos Connect 기반 차량용 Android 앱
+현대자동차그룹 차량용 앱 개발 공모전 출품작
 
-**현대오토에버 App Dev Challenge 출품작**
+[시연 순서](docs/DEMO.md) · [시연 경로 GPX](tools/demo-route.gpx) · [검증 현황](docs/DEVELOPMENT_STATUS.md)
 
-![Android Automotive](https://img.shields.io/badge/Android-Automotive-3DDC84?logo=android&logoColor=white)
-![Kotlin](https://img.shields.io/badge/Kotlin-used-7F52FF?logo=kotlin&logoColor=white)
-![Gradle](https://img.shields.io/badge/Gradle-9.6.0-02303A?logo=gradle&logoColor=white)
-![Pleos Vehicle SDK](https://img.shields.io/badge/Pleos_Vehicle-2.3.2-19324D)
-![NaviHelper SDK](https://img.shields.io/badge/NaviHelper-3.0.5-356AA0)
+## 서울역에서 기흥역까지
 
-</div>
+| 주행 장면 | 앱에서 볼 수 있는 동작 |
+| --- | --- |
+| **서울역에서 출발** | 남은 시간에 맞춰 일반 브리핑을 고르고 음성으로 들려줍니다. 경로 그림에는 현재 위치와 판교 구간이 표시됩니다. |
+| **판교 진입** | 판교 진입을 감지하면 전환 안내가 나옵니다. 듣던 이야기가 끝나면 판교의 산업·경제 이야기로 넘어갑니다. |
+| **기흥역 도착 후 주차** | 목적지 근처에 도착하고 기어를 P로 바꾸면 오늘의 발견과 퀴즈를 열 수 있습니다. 퀴즈는 끝까지 들은 이야기에서 최대 3문항을 냅니다. |
 
----
+시연은 에뮬레이터에서 GPX를 재생하고 **Pleos FusedLocation**으로 좌표와 근접 알림을 받는 방식입니다. 화면의 남은 시간은 시연 경로의 위치를 바탕으로 앱에서 추정합니다. 원고와 문항은 앱에 포함돼 있어 서버 없이 브리핑을 듣고 퀴즈를 풀 수 있습니다.
 
-## Demo
+## 실행 및 시연
 
-현재 저장소에는 공개용 시연 영상, GIF, 앱 스크린샷이 없습니다. 화면과 기능을 확인한 시연 자료가 준비되면 이곳에 추가합니다.
-
-## Overview
-
-출퇴근은 반복되지만, 그 시간을 따로 공부에 쓰기는 어렵습니다. ROUTEONOMY는 내비게이션의 남은 시간과 이동 중인 지역을 바탕으로 산업·경제 이야기를 들려주고, 도착 후 그날의 발견을 정리하는 앱입니다.
-
-- **대상 사용자:** 자가용으로 출퇴근하는 직장인
-- **해결 방식:** 남은 시간에 맞는 길이의 브리핑을 구성하고, 지역별 이야기를 더합니다.
-- **콘텐츠 원칙:** 투자 권유 대신 산업과 개념을 설명합니다.
-- **1차 콘텐츠:** 서버 없이 앱에 포함한 로컬 JSON을 사용합니다.
-- **오디오 분류 검토:** 팟캐스트형 오디오 브리핑을 지향합니다. Pleos Music/Audio 등록 적합성과 하위 분류는 확인 중입니다.
-
-## Key Features
-
-| 기능 | 계획된 동작 | 현재 구현 상태 |
-|---|---|---|
-| F1 기어 모드 | D/R/N은 주행, P는 주차 화면으로 전환 | Vehicle SDK 연결 및 Fake 입력 구현. Pleos AVD에서 P/D 전환 확인 |
-| F2 남은 시간 | NaviHelper 잔여 시간·거리 반영, 테스트 기본 ETA 사용 | 조회 콜백 연결. `remainTime` 단위 미확인이라 15분 테스트 ETA 사용 |
-| F3 브리핑 플래너 | 남은 시간 안에서 로컬 콘텐츠 구성 | `segments.json` 기반 시간 예산 플래너 구현 |
-| F4 음성 브리핑 | 선택된 세그먼트를 순서대로 TTS 재생 | Pleos TTS `ON_DEVICE` 구현. AVD에서 재생·일시정지·재개·다음 주제·완주 후 자동 진행 확인. 음성 떨림 원인 미확인 |
-| F5 지역 브리핑 | 지정 지역 진입 시 지역 콘텐츠 삽입 | 미구현 |
-| F6 주행 화면 | ETA·현재 주제 중심의 최소 UI | `distractionOptimized` 선언으로 D단(50 km/h)에서 화면 유지, 큰 ETA·현재 주제 표시와 TTS 연속 재생 확인. 주행 중 조작 버튼 노출은 미정 |
-| F7 오늘의 발견 | 완주 브리핑의 주제·용어·출처 표시 | 완주한 항목만 표시(건너뛴 항목 제외), P단에서만 표시. AVD 확인 완료 |
-| 도착 후 퀴즈 | 도착·정차 후 콘텐츠 기반 퀴즈 | 시연용 화면만 있음. 문항·채점 미구현 |
-
-> 주차(P)와 목적지 도착은 별도 상태입니다. P단 진입만으로 퀴즈를 열지 않습니다.
-
-## User Flow
-
-아래는 목표 사용자 흐름입니다. 현재 앱에서 전체 시나리오가 동작하는 것은 아닙니다.
-
-1. 내비게이션 목적지를 설정하고 주행을 시작합니다.
-2. 앱은 남은 시간에 맞춰 로컬 콘텐츠 세그먼트를 선택합니다.
-3. 이동 중 ETA가 바뀌면 아직 시작하지 않은 브리핑을 다시 구성합니다.
-4. 지정 지역 진입 기능이 연결되면 해당 지역 브리핑을 현재 이야기 뒤에 넣습니다.
-5. 목적지 도착 후 정차하면 오늘의 발견과 퀴즈를 제공합니다.
-
-주행 전 화면 → 브리핑 TTS → D단 주행 중 재생 → 주차 후 오늘의 발견까지는 Pleos AVD에서 확인했습니다. 지역 진입, 실제 ETA 자동 반영, 도착 후 퀴즈는 아직 완성되지 않았습니다.
-
-## Pleos SDK Integration
-
-| SDK/API | 앱에서의 용도 | 프로젝트 연결 상태 |
-|---|---|---|
-| Vehicle SDK 2.3.2 | P/D/R/N 기어 이벤트 | 구현됨. `CAR_DRIVE` 권한 선언 |
-| NaviHelper 3.0.5 | 목적지 잔여 시간·거리 조회 | 콜백 연결됨. `remainTime` 단위와 자동 갱신 반영은 미확인 |
-| TextToSpeech 3.3.1 | 브리핑 음성 출력 | `ON_DEVICE` 한국어 연결. P/D단 재생 확인. 음성 떨림 원인(에뮬레이터/TTS) 미확인 |
-| FusedLocation | 지역 진입 이벤트 | 미연결. AVD 지원과 권한 접근 미검증 |
-| SpeechToText | 음성 인식 | 1차 기능 범위에 포함되지 않음 |
-
-Music/Audio 분류나 `android:appCategory="audio"` 설정만으로 TTS/STT 권한 또는 D단 실행이 보장되는 것은 아닙니다. 주행 허용 여부와 각 SDK 접근 권한은 별도로 확인합니다.
-
-## Architecture
-
-현재 코드는 단일 `:app` 모듈을 사용합니다.
-
-```mermaid
-flowchart LR
-    UI[ui / MainActivity]
-    Domain[domain / DriveSession · BriefingPlanner]
-    Data[data / AssetSegmentRepository]
-    JSON[assets / segments.json]
-    Pleos[pleos / GearMonitor · NaviEtaClient]
-    Fake[simulation / FakeVehicleInput]
-    Vehicle[Vehicle SDK]
-    Navi[NaviHelper SDK]
-
-    UI --> Domain
-    UI --> Data
-    UI --> Pleos
-    UI --> Fake
-    Data --> JSON
-    Data --> Domain
-    Pleos --> Vehicle
-    Pleos --> Navi
-```
-
-`MainActivity`가 현재 화면과 연결 객체를 함께 구성합니다. 현재 구현 상태와 다음 우선순위는 [개발 현황](docs/DEVELOPMENT_STATUS.md)을 참고하세요. 세부 설계는 [ARCHITECTURE.md](docs/ARCHITECTURE.md)를 참고하세요.
-
-## Tech Stack
-
-- **언어:** Kotlin, Java
-- **화면:** Android Activity와 Views, AppCompat, Material Components
-- **구성:** 단일 Android `:app` 모듈, Gradle Kotlin DSL, Version Catalog
-- **Pleos SDK:** Vehicle 2.3.2, NaviHelper 3.0.5
-- **테스트:** JUnit 4 기반 JVM 단위 테스트
-- **빌드:** Gradle 9.6.0, Android Gradle Plugin 9.5.1
-- **SDK 설정:** compileSdk 37, targetSdk 37, minSdk 28
-- **시연 환경:** Pleos Connect v2.1.0 AVD, Android API 34
-
-## Getting Started
-
-### 요구 사항
-
-- Android Studio와 Android SDK
-- Pleos Connect v2.1.0 API 34 AVD
-- Pleos Maven 저장소 SDK를 내려받을 수 있는 개발 환경
-
-### 빌드
+| 항목 | 환경 |
+| --- | --- |
+| 에뮬레이터 | Pleos Connect v2.1.0, Android 14(API 34), 2560 × 1440 |
+| 앱 빌드 | Android Studio, Android SDK 37, Gradle Wrapper |
+| 시연 입력 | Extended Controls의 Location, Pleos Virtual Console |
 
 ```bash
-git clone https://github.com/beolene1/ROUTEONOMY.git
-cd ROUTEONOMY
 ./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-빌드된 앱은 Android Studio의 Pleos AVD에서 실행합니다. Pleos Virtual Console에서 기어·차량 상태를 바꿔 SDK 입력을 확인할 수 있습니다. 현재 D단에서는 Pleos 시스템이 앱을 가리므로 주행 화면 직접 확인이 제한됩니다.
+1. Pleos AVD를 Cold Boot로 실행합니다. Extended Controls의 **Location**에서 시작 위치를 서울역으로 설정합니다.
+2. Routeonomy를 열고 첫 실행에 표시되는 Pleos 위치 권한을 허용합니다. 출발 화면에서 일반 브리핑을 시작합니다.
+3. **Location → Routes**에서 [시연 GPX](tools/demo-route.gpx)를 재생하고, Virtual Console에서 기어를 D로 바꿉니다.
+4. 판교에 들어설 때 전환 안내와 다음 브리핑을 확인합니다. 기흥역 근처에 도착한 뒤 기어를 P로 바꾸고 퀴즈를 엽니다.
 
-자동 검증은 다음 명령으로 실행합니다.
+서울역 좌표, 권장 재생 속도, 위치 수신이 안 될 때의 대체 절차는 [시연 가이드](docs/DEMO.md)에 있습니다.
+
+## Pleos SDK와 검증 범위
+
+| SDK | 맡은 역할 |
+| --- | --- |
+| Vehicle 2.3.2 | 기어 신호를 받아 주행과 주차 화면을 전환합니다. |
+| FusedLocation 1.1.3 | 위치와 근접 알림을 받아 경로 그림을 갱신하고, 판교 진입과 기흥역 근접 도착을 판정합니다. |
+| TextToSpeech 3.3.1 | 한국어 브리핑을 문장 단위로 재생합니다. |
+
+Pleos AVD에서 기어 전환, 한국어 TTS, GPX 재생 중 위치 수신과 판교 근접 알림을 확인했습니다. 위치 입력부터 도착 후 퀴즈까지 이어지는 통합 시연은 AVD 리허설 예정입니다.
+
+자동 검증은 단위 테스트, lint, 디버그 APK 빌드를 실행합니다.
 
 ```bash
 ./tools/verify.sh
 ```
 
-## Development Status
+## 개발 문서
 
-**목표:** 2026년 11월 14일까지 시연 가능한 MVP, 11월 15일 1차 제출
-
-현재 기능별 구현·검증 상태, 우선순위, Android Studio 재개 방법은 [docs/DEVELOPMENT_STATUS.md](docs/DEVELOPMENT_STATUS.md)에 기록합니다.
-
-## Team
-
-- [@beolene1](https://github.com/beolene1)
-
-## References
-
-- [현대오토에버 App Dev Challenge 개발 환경 안내](https://appdevchallenge.auto-hmg.io/guide/development)
-- [Pleos Connect SDK 문서](https://document.pleos.ai/docs/pleos-only/connect-sdk-pleos/)
-- [Pleos Music/Audio 앱 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/music-audio-app-developement-guide)
-- [Pleos 주행 규제 개발 가이드](https://document.pleos.ai/docs/pleos-only/vehicle-app-developer-guide/driving-restriction-development-guide)
 - [제품 명세](docs/PRODUCT.md)
 - [아키텍처](docs/ARCHITECTURE.md)
+- [개발 현황](docs/DEVELOPMENT_STATUS.md)
+- [Pleos Connect SDK 공식 문서](https://document.pleos.ai/docs/pleos-only/connect-sdk-pleos/)
+
+팀 [@beolene1](https://github.com/beolene1)
