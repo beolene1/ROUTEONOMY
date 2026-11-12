@@ -1,0 +1,25 @@
+{
+  "origin": {
+    "name": "서울역",
+    "latitude": 37.55594,
+    "longitude": 126.97233
+  },
+  "destination": {
+    "name": "기흥역",
+    "latitude": 37.27566,
+    "longitude": 127.11595
+  },
+  "remainingMinutes": 40,
+  "simulationStops": [
+    {
+      "name": "판교 진입 직전",
+      "latitude": 37.41632,
+      "longitude": 127.09543
+    },
+    {
+      "name": "기흥역 근처",
+      "latitude": 37.28015,
+      "longitude": 127.11568
+    }
+  ]
+}

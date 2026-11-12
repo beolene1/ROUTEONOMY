@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.pleos.navihelper)
     implementation(libs.pleos.tts)
     testImplementation(libs.junit)
+    testImplementation(libs.org.json)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 }
