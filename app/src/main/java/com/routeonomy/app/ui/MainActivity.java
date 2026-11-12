@@ -37,6 +37,7 @@ import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
 import com.routeonomy.app.pleos.NaviRouteProbe;
 import com.routeonomy.app.pleos.NaviVoiceMonitor;
+import com.routeonomy.app.pleos.WindowAndFocusProbe;
 import com.routeonomy.app.simulation.FakeRouteInput;
 import com.routeonomy.app.simulation.FakeVehicleInput;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public final class MainActivity extends Activity {
     private NaviEtaClient naviEtaClient;
     private NaviRouteProbe naviProbe; // AVD experiment: real navi route/events
     private TextView naviProbeStatus;
+    private WindowAndFocusProbe windowFocusProbe; // AVD experiment: adjacent navi window, audio focus
     private NaviVoiceMonitor naviVoiceMonitor; // AVD experiment: is navi voice guidance observable?
     private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
@@ -161,6 +163,7 @@ public final class MainActivity extends Activity {
             return kotlin.Unit.INSTANCE;
         });
         naviVoiceMonitor.start();
+        windowFocusProbe = new WindowAndFocusProbe(this, message -> { naviProbe.note(message); return kotlin.Unit.INSTANCE; });
     }
 
     private void buildUi() {
@@ -220,6 +223,10 @@ public final class MainActivity extends Activity {
         Button probeQuery=button("[실험] 내비 상태 조회"); probeQuery.setOnClickListener(v->naviProbe.queryState()); probeRow.addView(probeQuery,weight());
         Button probeCancel=button("[실험] 경로 취소"); probeCancel.setOnClickListener(v->naviProbe.cancelRoute()); probeRow.addView(probeCancel,weight());
         simulationPanel.addView(probeRow);
+        LinearLayout probeRow2=new LinearLayout(this);
+        Button probeAdjacent=button("[실험] 내비 옆 창으로 열기"); probeAdjacent.setOnClickListener(v->windowFocusProbe.openNaviAdjacent()); probeRow2.addView(probeAdjacent,weight());
+        Button probeFocus=button("[실험] 오디오 포커스 요청/반납"); probeFocus.setOnClickListener(v->windowFocusProbe.toggleFocus()); probeRow2.addView(probeFocus,weight());
+        simulationPanel.addView(probeRow2);
         naviProbeStatus=label(13,ink); naviProbeStatus.setText("내비 실험 대기"); simulationPanel.addView(naviProbeStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
@@ -475,5 +482,5 @@ public final class MainActivity extends Activity {
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
 }

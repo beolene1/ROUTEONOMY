@@ -129,7 +129,7 @@ class NaviRouteProbe(context: Context, private val onLog: (String) -> Unit) {
         Log.i(TAG, message)
         synchronized(lines) {
             lines.addFirst("${time.format(Date())} $message")
-            while (lines.size > 8) lines.removeLast()
+            while (lines.size > 14) lines.removeLast()
             onLog(lines.joinToString("\n"))
         }
     }
