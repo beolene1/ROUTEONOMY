@@ -40,6 +40,7 @@ final class QuizScreen extends LinearLayout {
     private QuizSession quiz;
     private String hint;
     private Integer pending;
+    private String note; // hint or help text kept while the user picks a choice
 
     QuizScreen(Context context, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext) {
         super(context);
@@ -118,6 +119,7 @@ final class QuizScreen extends LinearLayout {
         this.quiz = quiz;
         this.hint = hintText;
         pending = null;
+        note = null;
         refresh();
     }
 
@@ -165,7 +167,8 @@ final class QuizScreen extends LinearLayout {
 
         hintButton.setVisibility(selected == null && hint != null && !hint.isEmpty() ? VISIBLE : INVISIBLE);
         if (selected == null) {
-            feedback.setVisibility(GONE);
+            if (note == null) feedback.setVisibility(GONE);
+            else showFeedback(note, true);
             setPrimary("정답 제출하기", pending != null);
         } else {
             boolean correct = selected == current.getAnswerIndex();
@@ -225,13 +228,16 @@ final class QuizScreen extends LinearLayout {
     }
 
     private void showHint() {
-        if (hint != null && !hint.isEmpty()) showFeedback("힌트 · " + hint, true);
+        if (hint == null || hint.isEmpty()) return;
+        note = "힌트 · " + hint;
+        showFeedback(note, true);
     }
 
     private void showHelp() {
         if (quiz == null || quiz.isFinished()) return;
         if (quiz.isAnswered()) return; // keep the explanation visible
-        showFeedback("선택지를 하나 고른 뒤 '정답 제출하기'를 누르세요. 막히면 '힌트 확인하기'로 새 용어를 볼 수 있어요.", true);
+        note = "선택지를 하나 고른 뒤 '정답 제출하기'를 누르세요. 막히면 '힌트 확인하기'로 새 용어를 볼 수 있어요.";
+        showFeedback(note, true);
     }
 
     private void showFeedback(String message, boolean good) {

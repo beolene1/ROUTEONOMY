@@ -475,9 +475,10 @@ public final class MainActivity extends Activity {
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
         String route = routeStatusText();
-        float tripProgress = 1f - session.etaMinutes() / (float) Math.max(1, trip.getRemainingMinutes());
-        nowPlaying.bind(current, current == null ? null : firstSentence(current.getScript()),
-                (int) (studyMillis / 60_000), session.etaMinutes(), tripProgress);
+        boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
+        int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
+        float tripProgress = 1f - driveLeft / (float) Math.max(1, trip.getRemainingMinutes());
+        nowPlaying.bind(current, firstSentence(current), (int) (studyMillis / 60_000), driveLeft, tripProgress);
         String mapRegion = regionTransition.enteredRegionId() != null ? regionTransition.enteredRegionId()
                 : prediction != null ? prediction.getRegion().getId() : null;
         routeMap.setState(currentLocation, mapRegion, regionTransition.enteredRegionId() != null,
@@ -497,7 +498,11 @@ public final class MainActivity extends Activity {
         enterButton.setText((target == null ? "지역" : target.getName()) + " 진입");
         enterButton.setEnabled(target != null);
         boolean quizAllowed = session.canStartQuiz();
-        if (!quizAllowed) { quiz = null; quizEmptyNotice = false; arrivalPopup.hide(); } // left P or arrival was cleared: stop the quiz
+        if (!quizAllowed) {
+            quiz = null; quizEmptyNotice = false; arrivalPopup.hide(); // left P or arrival was cleared: stop the quiz
+            // A cleared (simulated) arrival must not use up the popup of the real arrival.
+            if (session.arrival() != DriveSession.Arrival.ARRIVED) arrivalCelebrated = false;
+        }
         else if (!arrivalCelebrated) {
             // First time arrival and P hold together: praise, then offer the quiz.
             arrivalCelebrated = true;
@@ -644,9 +649,16 @@ public final class MainActivity extends Activity {
         chunkIndex=0;
         speakCurrentChunk();
     }
-    private String firstSentence(String script) {
-        List<String> sentences = splitIntoChunks(script);
-        return sentences.isEmpty() ? "" : sentences.get(0);
+    private String firstSentenceId, firstSentenceText;
+    /** Hook line under the Now Playing title; cached because render() runs on every location fix. */
+    private String firstSentence(BriefingSegment segment) {
+        if (segment == null) return null;
+        if (!segment.getId().equals(firstSentenceId)) {
+            List<String> sentences = splitIntoChunks(segment.getScript());
+            firstSentenceId = segment.getId();
+            firstSentenceText = sentences.isEmpty() ? "" : sentences.get(0);
+        }
+        return firstSentenceText;
     }
     private List<String> splitIntoChunks(String script) {
         List<String> chunks = new java.util.ArrayList<>();
