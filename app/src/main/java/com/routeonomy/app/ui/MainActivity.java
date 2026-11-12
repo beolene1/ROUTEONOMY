@@ -40,10 +40,7 @@ import com.routeonomy.app.domain.TripContext;
 import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
-import com.routeonomy.app.pleos.NaviRouteProbe;
 import com.routeonomy.app.pleos.FusedLocationSource;
-import com.routeonomy.app.pleos.NaviVoiceMonitor;
-import com.routeonomy.app.pleos.WindowAndFocusProbe;
 import com.routeonomy.app.simulation.FakeRouteInput;
 import com.routeonomy.app.simulation.FakeVehicleInput;
 import java.util.ArrayList;
@@ -62,10 +59,6 @@ public final class MainActivity extends Activity {
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
-    private NaviRouteProbe naviProbe; // AVD experiment: real navi route/events
-    private TextView naviProbeStatus;
-    private WindowAndFocusProbe windowFocusProbe; // AVD experiment: adjacent navi window, audio focus
-    private NaviVoiceMonitor naviVoiceMonitor; // AVD experiment: is navi voice guidance observable?
     private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
@@ -187,19 +180,12 @@ public final class MainActivity extends Activity {
             (rawTime, meters) -> { runOnUiThread(() -> sdkStatus.setText("NaviHelper 응답 · remainTime(raw)=" + rawTime + " · remainDistance=" + meters + "m")); return kotlin.Unit.INSTANCE; },
             message -> { runOnUiThread(() -> sdkStatus.setText(message)); return kotlin.Unit.INSTANCE; });
         naviEtaClient.start();
-        naviProbe = new NaviRouteProbe(this, text -> { runOnUiThread(() -> naviProbeStatus.setText(text)); return kotlin.Unit.INSTANCE; });
-        naviVoiceMonitor = new NaviVoiceMonitor(this, (naviSpeaking, usages) -> {
-            naviProbe.note((naviSpeaking ? "♪ 내비 음성 재생 중" : "오디오") + " · 재생 중인 소리: " + usages);
-            return kotlin.Unit.INSTANCE;
-        });
-        naviVoiceMonitor.start();
         locationSource = new FusedLocationSource(this, fences, new FusedLocationSource.Listener() {
             @Override public void onLocation(GeoPoint point) { runOnUiThread(() -> onRealLocation(point)); }
             @Override public void onFenceTransition(String fenceId, boolean entered) { runOnUiThread(() -> onProximityAlert(fenceId, entered)); }
             @Override public void onStatus(String message) { runOnUiThread(() -> { locationSourceStatus = message; render(); }); }
         });
         startLocation();
-        windowFocusProbe = new WindowAndFocusProbe(this, message -> { naviProbe.note(message); return kotlin.Unit.INSTANCE; });
     }
 
     private void buildUi() {
@@ -255,20 +241,6 @@ public final class MainActivity extends Activity {
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
-        // AVD experiment: does the Pleos navi accept our route and send route/location/arrival events?
-        Place destination = trip.getDestination();
-        Button probeRoute=button("[실험] 내비 경로 요청 → " + destination.getName());
-        probeRoute.setOnClickListener(v->naviProbe.requestRoute(destination.getLocation().getLatitude(), destination.getLocation().getLongitude(), destination.getName()));
-        simulationPanel.addView(probeRoute,full());
-        LinearLayout probeRow=new LinearLayout(this);
-        Button probeQuery=button("[실험] 내비 상태 조회"); probeQuery.setOnClickListener(v->naviProbe.queryState()); probeRow.addView(probeQuery,weight());
-        Button probeCancel=button("[실험] 경로 취소"); probeCancel.setOnClickListener(v->naviProbe.cancelRoute()); probeRow.addView(probeCancel,weight());
-        simulationPanel.addView(probeRow);
-        LinearLayout probeRow2=new LinearLayout(this);
-        Button probeAdjacent=button("[실험] 내비 옆 창으로 열기"); probeAdjacent.setOnClickListener(v->windowFocusProbe.openNaviAdjacent()); probeRow2.addView(probeAdjacent,weight());
-        Button probeFocus=button("[실험] 오디오 포커스 요청/반납"); probeFocus.setOnClickListener(v->windowFocusProbe.toggleFocus()); probeRow2.addView(probeFocus,weight());
-        simulationPanel.addView(probeRow2);
-        naviProbeStatus=label(13,ink); naviProbeStatus.setText("내비 실험 대기"); simulationPanel.addView(naviProbeStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
 
@@ -691,16 +663,11 @@ public final class MainActivity extends Activity {
         else locationSourceStatus = "위치: 권한 거부 · 시뮬레이션 입력으로 진행";
         render();
     }
-    /** Window resized/moved (Pleos window bar): the activity is kept; log the new window for the experiment. */
+    /** Window resized/moved (Pleos window bar): the activity is kept (configChanges); re-lay out the panels. */
     @Override public void onConfigurationChanged(android.content.res.Configuration config) {
         super.onConfigurationChanged(config);
         applyLayout();
         render();
-        if (naviProbe != null) naviProbe.note("창 변경: " + config.screenWidthDp + "x" + config.screenHeightDp + "dp, 멀티윈도우=" + isInMultiWindowMode());
     }
-    @Override public void onMultiWindowModeChanged(boolean inMultiWindow, android.content.res.Configuration config) {
-        super.onMultiWindowModeChanged(inMultiWindow, config);
-        if (naviProbe != null) naviProbe.note("멀티윈도우 모드 변경: " + inMultiWindow);
-    }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
 }
