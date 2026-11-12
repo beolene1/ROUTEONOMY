@@ -233,7 +233,7 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizScreen = new QuizScreen(this, this::closeQuiz, this::onQuizAnswer, this::onQuizNext);
+        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext);
         quizScreen.setPadding(style.size(28), style.size(24), style.size(28), style.size(24));
         quizScroll = new ScrollView(this);
         quizScroll.setFillViewport(true);
@@ -512,6 +512,10 @@ public final class MainActivity extends Activity {
         render();
         quizScroll.scrollTo(0, 0);
     }
+    private void openSimulationFromQuiz(){
+        quizHidden = true;
+        if (!simulationOpen) toggleSimulationFromCard(); else render();
+    }
     private void closeQuiz(){
         quizHidden = true;
         render();
@@ -535,14 +539,15 @@ public final class MainActivity extends Activity {
         String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice();
         if (java.util.Objects.equals(key, renderedQuizKey)) return;
         renderedQuizKey = key;
-        if (quiz != null) quizScreen.bind(quiz, quizCategory());
+        if (quiz != null) quizScreen.bind(quiz, quizHint());
     }
-    /** Topic of the briefing the current question came from, shown as the quiz category pill. */
-    private String quizCategory(){
+    /** Hint for the current question: the new term of the briefing it came from. */
+    private String quizHint(){
         QuizQuestion question = quiz.current();
-        if (question == null) return "오늘의 브리핑";
-        for (BriefingSegment s : segments) if (s.getId().equals(question.getSegmentId())) return s.getTopic();
-        return "오늘의 브리핑";
+        if (question == null) return null;
+        for (BriefingSegment s : segments) if (s.getId().equals(question.getSegmentId()))
+            return s.getTerm().getName() + " — " + s.getTerm().getExplanation();
+        return null;
     }
     private String discoveryText(){
         List<BriefingSegment> heard = TodayDiscoveries.from(segments, completedSegmentIds);

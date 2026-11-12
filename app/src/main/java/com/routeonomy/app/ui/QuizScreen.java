@@ -3,10 +3,8 @@ package com.routeonomy.app.ui;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -18,113 +16,108 @@ import java.util.List;
 import java.util.function.IntConsumer;
 
 /**
- * Figma quiz screen: progress, question card, A–C choice cards and a "정답 확인" button.
- * The pending (not yet checked) choice lives only here; grading stays in [QuizSession].
+ * Korean Figma quiz screen: app header, intro, answered/total bar, "Q n." card,
+ * 2×2 choice cards and the 힌트 / 정답 제출하기 / ? / settings / close row.
+ * The pending (not yet submitted) choice lives only here; grading stays in [QuizSession].
  */
 final class QuizScreen extends LinearLayout {
     private static final int WRONG_FILL = 0xfff7e4df;
     private static final int WRONG = 0xffb4533f;
 
     private final UiStyle style;
-    private final IntConsumer onCheck;
+    private final IntConsumer onSubmit;
     private final Runnable onNext;
-    private final TextView category;
+    private final TextView intro;
     private final TextView progressLabel;
     private final View progressFill;
     private final View progressRest;
+    private final TextView number;
     private final TextView question;
-    private final ImageView chip;
     private final LinearLayout choices;
     private final TextView feedback;
+    private final TextView hintButton;
     private final TextView primary;
     private QuizSession quiz;
+    private String hint;
     private Integer pending;
 
-    QuizScreen(Context context, Runnable onClose, IntConsumer onCheck, Runnable onNext) {
+    QuizScreen(Context context, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext) {
         super(context);
-        this.onCheck = onCheck;
+        this.onSubmit = onSubmit;
         this.onNext = onNext;
         style = new UiStyle(context, 1f);
         setOrientation(VERTICAL);
 
-        LinearLayout header = row();
-        header.addView(style.logoPill(), wrap());
-        category = style.pill("", UiStyle.GREEN, UiStyle.MINT, 15);
-        category.setSingleLine(true);
-        category.setEllipsize(TextUtils.TruncateAt.END);
-        // Compact pill centred in the space between logo and close button.
-        android.widget.FrameLayout categorySlot = new android.widget.FrameLayout(context);
-        categorySlot.addView(category, new android.widget.FrameLayout.LayoutParams(
-                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER));
-        LayoutParams categoryParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        categoryParams.setMarginStart(style.size(16));
-        categoryParams.setMarginEnd(style.size(16));
-        header.addView(categorySlot, categoryParams);
-        TextView close = style.text("✕", 22, UiStyle.INK, false);
-        close.setGravity(Gravity.CENTER);
-        close.setBackground(style.shape(Color.WHITE, 24));
-        close.setElevation(style.size(3));
-        close.setContentDescription("퀴즈 닫기");
-        style.clickable(close, onClose);
-        header.addView(close, new LayoutParams(style.size(48), style.size(48)));
-        addView(header, matchWrap(0));
+        addView(style.appHeader(false), matchWrap(0));
+        intro = style.text("", 19, UiStyle.INK, false);
+        intro.setGravity(Gravity.CENTER);
+        intro.setLineSpacing(style.size(4), 1f);
+        addView(intro, matchWrap(24));
 
         LinearLayout progress = row();
-        progressLabel = style.text("", 16, UiStyle.INK, true);
-        progress.addView(progressLabel, wrap());
+        progressLabel = style.text("", 18, UiStyle.MUTED, false);
+        progress.addView(progressLabel, style.wrapParams());
         LinearLayout track = new LinearLayout(context);
-        track.setBackground(style.shape(UiStyle.NEUTRAL, 4));
+        track.setBackground(style.shape(UiStyle.NEUTRAL, 8));
         track.setClipToOutline(true);
         progressFill = new View(context);
-        progressFill.setBackground(style.shape(UiStyle.GREEN, 4));
+        progressFill.setBackground(style.shape(UiStyle.SAGE, 8));
         progressRest = new View(context);
         track.addView(progressFill, new LayoutParams(0, LayoutParams.MATCH_PARENT, 0f));
         track.addView(progressRest, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
-        LayoutParams trackParams = new LayoutParams(0, style.size(8), 1f);
-        trackParams.setMarginStart(style.size(16));
+        LayoutParams trackParams = new LayoutParams(0, style.size(16), 1f);
+        trackParams.setMarginStart(style.size(12));
         progress.addView(track, trackParams);
-        addView(progress, matchWrap(24));
-        TextView basis = style.text("오늘 끝까지 들은 브리핑에서 출제", 14, UiStyle.MUTED, false);
-        basis.setGravity(Gravity.CENTER);
-        addView(basis, matchWrap(8));
+        addView(progress, matchWrap(14));
 
-        LinearLayout card = row();
-        card.setPadding(style.size(22), style.size(20), style.size(16), style.size(20));
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(VERTICAL);
+        card.setPadding(style.size(22), style.size(14), style.size(22), style.size(20));
         style.card(card);
-        question = style.text("", 24, UiStyle.INK, true);
-        question.setLineSpacing(style.size(4), 1f);
-        card.addView(question, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-        chip = new ImageView(context);
-        chip.setImageResource(R.drawable.pre_drive_chip);
-        chip.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        chip.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LayoutParams chipParams = new LayoutParams(style.size(120), style.size(90));
-        chipParams.setMarginStart(style.size(12));
-        card.addView(chip, chipParams);
-        addView(card, matchWrap(16));
+        TextView badge = style.pill("Today’s learning", UiStyle.GREEN, UiStyle.MINT, 13);
+        badge.setPadding(style.size(8), style.size(2), style.size(8), style.size(2));
+        LayoutParams badgeParams = style.wrapParams();
+        badgeParams.setMarginStart(style.size(46));
+        card.addView(badge, badgeParams);
+        LinearLayout questionRow = row();
+        number = style.text("", 26, UiStyle.SAGE, true);
+        questionRow.addView(number, style.wrapParams());
+        question = style.text("", 19, UiStyle.INK, true);
+        question.setLineSpacing(style.size(3), 1f);
+        LayoutParams questionParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+        questionParams.setMarginStart(style.size(8));
+        questionRow.addView(question, questionParams);
+        card.addView(questionRow, matchWrap(4));
+        addView(card, matchWrap(20));
 
         choices = new LinearLayout(context);
         choices.setOrientation(VERTICAL);
-        addView(choices, matchWrap(8));
+        addView(choices, matchWrap(6));
 
         feedback = style.text("", 17, UiStyle.INK, false);
         feedback.setLineSpacing(style.size(4), 1f);
         feedback.setPadding(style.size(20), style.size(14), style.size(20), style.size(14));
         feedback.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
-        addView(feedback, matchWrap(16));
+        addView(feedback, matchWrap(18));
 
+        LinearLayout actions = row();
+        hintButton = style.action("힌트 확인하기", false, this::showHint);
+        actions.addView(hintButton, new LayoutParams(0, style.size(50), 1f));
         primary = style.action("", true, this::onPrimary);
-        LayoutParams primaryParams = new LayoutParams(LayoutParams.MATCH_PARENT, style.size(54));
-        primaryParams.topMargin = style.size(16);
-        addView(primary, primaryParams);
+        LayoutParams primaryParams = new LayoutParams(0, style.size(50), 1.4f);
+        primaryParams.setMarginStart(style.size(12));
+        actions.addView(primary, primaryParams);
+        addIcon(actions, glyph("?"), "퀴즈 사용법", this::showHelp);
+        addIcon(actions, style.picture(R.drawable.pre_drive_settings), "시뮬레이션 설정", onSettings);
+        addIcon(actions, gridIcon(), "퀴즈 닫고 브리핑 화면으로", onClose);
+        addView(actions, matchWrap(24));
     }
 
-    /** Called when the quiz object, question or answer changed; drops any unchecked selection. */
-    void bind(QuizSession quiz, String categoryLabel) {
+    /** Called when the quiz object, question or answer changed; drops any unsubmitted selection. */
+    void bind(QuizSession quiz, String hintText) {
         this.quiz = quiz;
+        this.hint = hintText;
         pending = null;
-        category.setText(categoryLabel);
-        category.setVisibility(categoryLabel == null || categoryLabel.isEmpty() ? INVISIBLE : VISIBLE);
         refresh();
     }
 
@@ -132,7 +125,8 @@ final class QuizScreen extends LinearLayout {
         int total = quiz.total();
         boolean finished = quiz.isFinished();
         int done = finished ? total : quiz.position() + (quiz.isAnswered() ? 1 : 0);
-        progressLabel.setText(Math.min(quiz.position() + 1, total) + " / " + total);
+        intro.setText("오늘 출근길에 배운 내용을 기억하고 있나요?\n" + total + "개의 질문으로 오늘의 경제 지식을 확인해 보세요.");
+        progressLabel.setText(done + " / " + total);
         float share = total == 0 ? 0f : (float) done / total;
         ((LayoutParams) progressFill.getLayoutParams()).weight = share;
         ((LayoutParams) progressRest.getLayoutParams()).weight = 1f - share;
@@ -140,37 +134,39 @@ final class QuizScreen extends LinearLayout {
         choices.removeAllViews();
 
         if (finished) {
-            question.setText("퀴즈 결과\n" + total + "문제 중 " + quiz.score() + "개 정답");
+            number.setText("");
+            question.setText("퀴즈 결과 · " + total + "문제 중 " + quiz.score() + "개 정답");
             showFeedback(quiz.score() == total ? "모두 맞혔어요! 오늘 브리핑을 잘 기억하고 계시네요."
                     : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.", quiz.score() == total);
+            hintButton.setVisibility(INVISIBLE);
             setPrimary("다시 풀기", true);
             return;
         }
         QuizQuestion current = quiz.current();
+        number.setText("Q" + (quiz.position() + 1) + ".");
         question.setText(current.getQuestion());
         Integer selected = quiz.selectedChoice();
         List<String> options = current.getChoices();
+        int cells = options.size() + options.size() % 2;
         LinearLayout line = null;
-        for (int i = 0; i < options.size(); i++) {
+        for (int i = 0; i < cells; i++) {
             if (i % 2 == 0) {
                 line = row();
                 line.setBaselineAligned(false);
-                choices.addView(line, matchWrap(12));
+                choices.addView(line, matchWrap(14));
             }
-            View choice = choiceCard(i, options.get(i), current.getAnswerIndex(), selected);
+            View cell = i < options.size()
+                    ? choiceCard(i, options.get(i), current.getAnswerIndex(), selected)
+                    : new View(getContext());
             LayoutParams params = new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f);
-            if (i % 2 == 1) params.setMarginStart(style.size(12));
-            line.addView(choice, params);
-        }
-        if (options.size() % 2 == 1) {
-            LayoutParams filler = new LayoutParams(0, 1, 1f);
-            filler.setMarginStart(style.size(12));
-            line.addView(new View(getContext()), filler);
+            if (i % 2 == 1) params.setMarginStart(style.size(22));
+            line.addView(cell, params);
         }
 
+        hintButton.setVisibility(selected == null && hint != null && !hint.isEmpty() ? VISIBLE : INVISIBLE);
         if (selected == null) {
             feedback.setVisibility(GONE);
-            setPrimary("정답 확인", pending != null);
+            setPrimary("정답 제출하기", pending != null);
         } else {
             boolean correct = selected == current.getAnswerIndex();
             showFeedback((correct ? "정답입니다!" : "아쉬워요. 정답은 " + letter(current.getAnswerIndex()) + "입니다.")
@@ -186,26 +182,26 @@ final class QuizScreen extends LinearLayout {
         boolean isPending = !checked && pending != null && pending == index;
 
         LinearLayout card = row();
-        card.setPadding(style.size(16), style.size(16), style.size(16), style.size(16));
-        card.setMinimumHeight(style.size(72));
+        card.setPadding(style.size(16), style.size(14), style.size(16), style.size(14));
+        card.setMinimumHeight(style.size(66));
         GradientDrawable background = style.shape(isAnswer || isPending ? UiStyle.MINT
-                : isWrongPick ? WRONG_FILL : Color.WHITE, 14);
+                : isWrongPick ? WRONG_FILL : Color.WHITE, 12);
         if (isAnswer || isPending) background.setStroke(style.size(2), UiStyle.GREEN);
         else if (isWrongPick) background.setStroke(style.size(2), WRONG);
         card.setBackground(background);
-        card.setElevation(style.size(2));
+        card.setElevation(style.size(3));
         if (checked && !isAnswer && !isWrongPick) card.setAlpha(0.6f);
 
         String mark = isAnswer ? "✓" : isWrongPick ? "✗" : letter(index);
-        TextView badge = style.text(mark, 16, isWrongPick ? WRONG : UiStyle.INK, true);
+        TextView badge = style.text(mark, 19, isWrongPick ? WRONG : UiStyle.MUTED, false);
         badge.setGravity(Gravity.CENTER);
         badge.setBackground(style.shape(isAnswer || isPending ? Color.WHITE : UiStyle.NEUTRAL, 18));
         badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         card.addView(badge, new LayoutParams(style.size(36), style.size(36)));
-        TextView text = style.text(label, 18, UiStyle.INK, isPending || isAnswer);
+        TextView text = style.text(label, 17, UiStyle.INK, false);
         text.setLineSpacing(style.size(3), 1f);
         LayoutParams textParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        textParams.setMarginStart(style.size(12));
+        textParams.setMarginStart(style.size(14));
         card.addView(text, textParams);
 
         String state = isAnswer ? ", 정답" : isWrongPick ? ", 선택한 오답" : isPending ? ", 선택됨" : "";
@@ -222,10 +218,20 @@ final class QuizScreen extends LinearLayout {
     private void onPrimary() {
         if (quiz == null) return;
         if (!quiz.isFinished() && !quiz.isAnswered()) {
-            if (pending != null) onCheck.accept(pending);
+            if (pending != null) onSubmit.accept(pending);
         } else {
             onNext.run();
         }
+    }
+
+    private void showHint() {
+        if (hint != null && !hint.isEmpty()) showFeedback("힌트 · " + hint, true);
+    }
+
+    private void showHelp() {
+        if (quiz == null || quiz.isFinished()) return;
+        if (quiz.isAnswered()) return; // keep the explanation visible
+        showFeedback("선택지를 하나 고른 뒤 '정답 제출하기'를 누르세요. 막히면 '힌트 확인하기'로 새 용어를 볼 수 있어요.", true);
     }
 
     private void showFeedback(String message, boolean good) {
@@ -240,6 +246,39 @@ final class QuizScreen extends LinearLayout {
         primary.setAlpha(enabled ? 1f : 0.45f);
     }
 
+    private void addIcon(LinearLayout row, View icon, String label, Runnable click) {
+        View button = style.iconButton(icon, 26, label, click);
+        LayoutParams params = new LayoutParams(style.size(50), style.size(50));
+        params.setMarginStart(style.size(12));
+        row.addView(button, params);
+    }
+
+    private TextView glyph(String value) {
+        TextView glyph = style.text(value, 20, UiStyle.MUTED, true);
+        glyph.setGravity(Gravity.CENTER);
+        glyph.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        return glyph;
+    }
+
+    private View gridIcon() {
+        android.widget.FrameLayout grid = new android.widget.FrameLayout(getContext());
+        grid.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        for (int r = 0; r < 2; r++) {
+            for (int c = 0; c < 2; c++) {
+                View cell = new View(getContext());
+                GradientDrawable outline = style.shape(Color.TRANSPARENT, 1);
+                outline.setStroke(Math.max(1, style.size(2)), UiStyle.MUTED);
+                cell.setBackground(outline);
+                android.widget.FrameLayout.LayoutParams params =
+                        new android.widget.FrameLayout.LayoutParams(style.size(10), style.size(10));
+                params.topMargin = style.size(2 + r * 13);
+                params.leftMargin = style.size(2 + c * 13);
+                grid.addView(cell, params);
+            }
+        }
+        return grid;
+    }
+
     private static String letter(int index) {
         return String.valueOf((char) ('A' + index));
     }
@@ -248,10 +287,6 @@ final class QuizScreen extends LinearLayout {
         LinearLayout row = new LinearLayout(getContext());
         row.setGravity(Gravity.CENTER_VERTICAL);
         return row;
-    }
-
-    private LayoutParams wrap() {
-        return new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
     }
 
     private LayoutParams matchWrap(int top) {
