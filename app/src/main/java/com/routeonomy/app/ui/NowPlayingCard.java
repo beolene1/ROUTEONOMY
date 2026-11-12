@@ -28,9 +28,8 @@ final class NowPlayingCard extends LinearLayout {
     private final TextView playbackStatus;
     private final TextView playButton;
     private final View settingsButton;
-    private final TextView nextButton;
 
-    NowPlayingCard(Context context, Runnable onBack, Runnable onPlayPause, Runnable onNext,
+    NowPlayingCard(Context context, Runnable onBack, Runnable onPlayPause, Runnable onPrevious, Runnable onNext,
             Runnable onSettings) {
         super(context);
         style = new UiStyle(context, 1f);
@@ -105,7 +104,15 @@ final class NowPlayingCard extends LinearLayout {
         playButton.setBackground(style.shape(UiStyle.PLAYER, 64));
         playButton.setElevation(style.size(6));
         style.clickable(playButton, onPlayPause);
-        controls.addView(playButton, new LayoutParams(style.size(128), style.size(128)));
+        // Previous · play/pause · next, usable in P and D.
+        LinearLayout transport = row();
+        transport.addView(skipButton("⏮\uFE0E", "이전 주제", onPrevious), new LayoutParams(style.size(64), style.size(64)));
+        LayoutParams playParams = new LayoutParams(style.size(128), style.size(128));
+        playParams.setMarginStart(style.size(16));
+        playParams.setMarginEnd(style.size(16));
+        transport.addView(playButton, playParams);
+        transport.addView(skipButton("⏭\uFE0E", "다음 주제", onNext), new LayoutParams(style.size(64), style.size(64)));
+        controls.addView(transport, style.wrapParams());
 
         LinearLayout level = row();
         level.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
@@ -119,10 +126,6 @@ final class NowPlayingCard extends LinearLayout {
         card.addView(controls, matchWrap(28));
         addView(card, matchWrap(18));
 
-        nextButton = style.action("다음 주제", false, onNext);
-        LayoutParams nextParams = new LayoutParams(LayoutParams.MATCH_PARENT, style.size(48));
-        nextParams.topMargin = style.size(12);
-        addView(nextButton, nextParams);
         setPlaying(false);
     }
 
@@ -152,10 +155,18 @@ final class NowPlayingCard extends LinearLayout {
         playButton.setContentDescription(playing ? "일시정지" : "재생");
     }
 
-    /** D: play/pause and home only (F6). P: also next topic and tools. */
+    /** D: previous/play-pause/next and home (F6). P: also the tools gear. */
     void setDriving(boolean driving) {
-        nextButton.setVisibility(driving ? GONE : VISIBLE);
         settingsButton.setVisibility(driving ? INVISIBLE : VISIBLE);
+    }
+
+    private TextView skipButton(String glyph, String label, Runnable click) {
+        TextView button = style.text(glyph, 24, UiStyle.INK, false);
+        button.setGravity(Gravity.CENTER);
+        button.setBackground(style.shape(UiStyle.NEUTRAL, 32));
+        button.setContentDescription(label);
+        style.clickable(button, click);
+        return button;
     }
 
     /** Audio wave mark: five rounded bars. */

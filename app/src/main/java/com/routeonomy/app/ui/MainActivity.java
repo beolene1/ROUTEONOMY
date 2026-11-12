@@ -54,6 +54,8 @@ public final class MainActivity extends Activity {
     private BriefingPlan plan;
     private final Set<String> playedSegmentIds = new HashSet<>();
     private final Set<String> completedSegmentIds = new LinkedHashSet<>();
+    // Segments in the order they started playing; "이전 주제" steps back through it.
+    private final List<String> playHistory = new ArrayList<>();
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
@@ -201,7 +203,7 @@ public final class MainActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
         nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
-                () -> advanceBriefing(false), this::toggleSimulationFromCard);
+                this::previousTopic, () -> advanceBriefing(false), this::toggleSimulationFromCard);
         root.addView(nowPlaying, full());
         playbackStatus = nowPlaying.playbackStatusView();
         // P only: script, discoveries, quiz entry and tools below the Now Playing card.
@@ -692,6 +694,36 @@ public final class MainActivity extends Activity {
         } else playbackStatus.setText("재생 완료 · " + completedSegmentIds.size() + "개 항목 청취 기록");
         render();
     }
+    /**
+     * "이전 주제": replays the topic started before the current one from its start; the interrupted
+     * topic goes back to the queue. With no earlier topic, restarts the current one.
+     */
+    private void previousTopic(){
+        if (!ttsReady) { playbackStatus.setText("Pleos TTS 준비 중"); return; }
+        if (playHistory.isEmpty()) return; // nothing played yet
+        String current = playHistory.get(playHistory.size() - 1);
+        boolean onCurrent = current.equals(currentSegmentId);
+        if (onCurrent && playHistory.size() == 1) { // no earlier topic: restart this one
+            playbackActive = false; // ignore a late onDone from the stopped sentence
+            tts.stop();
+            chunkIndex = 0;
+            playbackPaused = false;
+            speakCurrentChunk();
+            return;
+        }
+        if (onCurrent) playHistory.remove(playHistory.size() - 1); // interrupted: it will be planned again
+        String previous = playHistory.remove(playHistory.size() - 1);
+        tts.stop();
+        playbackActive = false; playbackPaused = false;
+        if (currentSegmentId != null) playedSegmentIds.remove(currentSegmentId);
+        currentSegmentId = null;
+        playedSegmentIds.remove(previous);
+        waitingForRegion = false;
+        preferredFirstId = previous; // replan puts it first even outside the time budget
+        replan();
+        speakCurrent();
+        render();
+    }
     private void speakCurrent(){
         if(!ttsReady) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
         preferredFirstId=null;
@@ -715,6 +747,7 @@ public final class MainActivity extends Activity {
         waitingForRegion=false;
         BriefingSegment segment=plan.getSegments().get(0);
         currentSegmentId=segment.getId();
+        if (playHistory.isEmpty() || !playHistory.get(playHistory.size() - 1).equals(currentSegmentId)) playHistory.add(currentSegmentId);
         currentChunks=splitIntoChunks(segment.getScript());
         if (pendingAnnouncement != null) { currentChunks.add(0, pendingAnnouncement); pendingAnnouncement = null; }
         chunkIndex=0;
