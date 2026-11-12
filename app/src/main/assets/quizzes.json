@@ -1,0 +1,58 @@
+[
+  {
+    "segmentId": "main-semiconductor",
+    "question": "HBM은 어떤 방법으로 데이터가 오가는 통로를 넓혔을까요?",
+    "choices": ["여러 메모리 칩을 쌓아서", "칩을 특수 액체에 담가서", "전력선을 새로 깔아서"],
+    "answerIndex": 0,
+    "explanation": "HBM은 여러 메모리 칩을 쌓아 데이터 통로를 넓힌 고대역폭 메모리입니다."
+  },
+  {
+    "segmentId": "main-grid",
+    "question": "먼 거리로 큰 전기를 보내는 전력망을 무엇이라고 할까요?",
+    "choices": ["배전망", "송전망", "통신망"],
+    "answerIndex": 1,
+    "explanation": "송전망은 먼 거리로 큰 전기를 보내고, 배전망은 동네와 건물까지 전기를 나눠 줍니다."
+  },
+  {
+    "segmentId": "main-cooling",
+    "question": "AI 데이터센터에서 액체 냉각이 쓰이기 시작한 이유는 무엇일까요?",
+    "choices": ["공기만으로는 고성능 칩의 열을 감당하기 어려워서", "액체가 공기보다 저렴해서", "서버 소음을 줄이기 위해서"],
+    "answerIndex": 0,
+    "explanation": "액체는 공기보다 열을 훨씬 잘 옮겨, 랙 하나가 100킬로와트를 넘는 AI 서버의 열을 식힐 수 있습니다."
+  },
+  {
+    "segmentId": "main-storage",
+    "question": "ESS(에너지 저장 시스템)를 쉽게 비유하면 무엇에 가까울까요?",
+    "choices": ["새로 짓는 발전소", "커다란 보조배터리", "전기요금 고지서"],
+    "answerIndex": 1,
+    "explanation": "ESS는 전기가 남을 때 저장했다가 모자랄 때 꺼내 쓰는 설비입니다."
+  },
+  {
+    "segmentId": "main-efficiency",
+    "question": "'와트당 성능'은 무엇을 뜻할까요?",
+    "choices": ["칩 하나의 판매 가격", "전력 1와트로 처리하는 계산량", "데이터센터 건물의 면적"],
+    "answerIndex": 1,
+    "explanation": "같은 전기로 얼마나 많은 계산을 하느냐가 AI 시대 효율 경쟁의 기준이 되고 있습니다."
+  },
+  {
+    "segmentId": "region-pangyo-realestate",
+    "question": "여러 투자자가 오피스 빌딩에 나누어 투자하고 임대 수익을 배당으로 받는 상품은?",
+    "choices": ["리츠", "정기적금", "국채"],
+    "answerIndex": 0,
+    "explanation": "리츠를 통하면 개인이 직접 사기 어려운 오피스 빌딩에도 나누어 투자할 수 있습니다."
+  },
+  {
+    "segmentId": "region-pangyo-industry",
+    "question": "관련 기업과 기관이 한 지역에 모여 만드는 생태계를 무엇이라고 할까요?",
+    "choices": ["프랜차이즈", "산업 클러스터", "공급 계약"],
+    "answerIndex": 1,
+    "explanation": "판교처럼 비슷한 기업이 모이면 인재·기술·투자 정보가 빠르게 오가는 산업 클러스터가 됩니다."
+  },
+  {
+    "segmentId": "region-pangyo-newbiz",
+    "question": "자율주행 같은 새 기술이 상용화되기 전에 실제 도로와 도시에서 시험하는 단계는?",
+    "choices": ["상장 단계", "배당 단계", "실증 단계"],
+    "answerIndex": 2,
+    "explanation": "새로운 기술은 실제 환경에서 시험하는 실증 단계를 거쳐야 상용화될 수 있습니다."
+  }
+]

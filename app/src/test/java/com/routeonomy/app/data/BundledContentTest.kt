@@ -14,6 +14,7 @@ class BundledContentTest {
     private val segments = SegmentJsonParser.segments(asset("segments.json"))
     private val regions = RouteJsonParser.regions(asset("regions.json"))
     private val trip = RouteJsonParser.trip(asset("demo_trip.json"))
+    private val quizzes = QuizJsonParser.questions(asset("quizzes.json"))
 
     @Test fun regionCandidatesIncludePangyoAndOthers() {
         assertEquals(listOf("pangyo", "dongtan", "namyangju", "hyehwa"), regions.map { it.id })
@@ -50,5 +51,22 @@ class BundledContentTest {
     @Test(expected = IllegalArgumentException::class)
     fun duplicateRegionIdsAreRejected() {
         RouteJsonParser.regions("""[{"id":"a","name":"A","latitude":37,"longitude":127,"radiusMeters":1},{"id":"a","name":"B","latitude":37,"longitude":127,"radiusMeters":1}]""")
+    }
+
+    @Test fun everyNonWrapupSegmentHasExactlyOneQuiz() {
+        val expected = segments.filter { it.type != BriefingSegment.Type.WRAPUP }.map { it.id }.toSet()
+        assertEquals(expected, quizzes.map { it.segmentId }.toSet())
+        assertTrue(quizzes.all { it.question.isNotBlank() && it.explanation.isNotBlank() && it.choices.none(String::isBlank) })
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun quizAnswerOutOfRangeIsRejected() {
+        QuizJsonParser.questions("""[{"segmentId":"a","question":"Q","choices":["x","y"],"answerIndex":2,"explanation":"E"}]""")
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun duplicateQuizSegmentIdsAreRejected() {
+        val row = """{"segmentId":"a","question":"Q","choices":["x","y"],"answerIndex":0,"explanation":"E"}"""
+        QuizJsonParser.questions("[$row,$row]")
     }
 }
