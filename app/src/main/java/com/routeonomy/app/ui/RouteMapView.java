@@ -20,12 +20,15 @@ import java.util.List;
  */
 final class RouteMapView extends View {
     private static final double METERS_PER_DEGREE = 111_320.0;
-    private static final int BACKGROUND = 0xffe9edf1;
-    private static final int ROUTE = 0xff8a9bab;
-    private static final int INK = 0xff262d35;
-    private static final int ACCENT = 0xffdc9eac;
-    private static final int ACTIVE = 0xffc2577a;
-    private static final int POSITION = 0xff2f6fde;
+    // Figma map tone: pale beige-grey ground, dark green route, mint region circles.
+    private static final int BACKGROUND = 0xffecebe4;
+    private static final int GRID = 0xfff5f4ef;
+    private static final int ROUTE = UiStyle.GREEN;
+    private static final int INK = UiStyle.INK;
+    private static final int ACCENT = 0xff6c9181;
+    private static final int ACTIVE = UiStyle.GREEN;
+    private static final int POSITION = UiStyle.INK;
+    private static final int LABEL = UiStyle.MUTED;
 
     private final float dp;
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -73,6 +76,7 @@ final class RouteMapView extends View {
 
     @Override protected void onDraw(Canvas canvas) {
         canvas.drawColor(BACKGROUND);
+        drawGrid(canvas);
         if (route.size() < 2) return;
         float top = 96 * dp; // room for the caption
         project(getWidth(), getHeight(), top);
@@ -95,7 +99,7 @@ final class RouteMapView extends View {
         if (destination != null) drawPlace(canvas, destination, ACTIVE);
         if (current != null && visible(current)) {
             float x = x(current), y = y(current);
-            fill.setColor(0x332f6fde);
+            fill.setColor(0x33151815);
             canvas.drawCircle(x, y, 22 * dp, fill);
             fill.setColor(Color.WHITE);
             canvas.drawCircle(x, y, 11 * dp, fill);
@@ -112,15 +116,24 @@ final class RouteMapView extends View {
         boolean highlighted = region.getId().equals(highlightedRegionId);
         float cx = x(region.getCenter()), cy = y(region.getCenter());
         float r = (float) (region.getRadiusMeters() / METERS_PER_DEGREE * unitsToPx);
-        fill.setColor(highlighted && regionEntered ? 0x66dc9eac : highlighted ? 0x40dc9eac : 0x22a9b4bd);
+        fill.setColor(highlighted && regionEntered ? 0x99d7ebe0 : highlighted ? 0x66d7ebe0 : 0x22a9ada4);
         canvas.drawCircle(cx, cy, r, fill);
-        stroke.setColor(highlighted ? ACCENT : 0xffa9b4bd);
+        stroke.setColor(highlighted ? ACCENT : 0xffb9bab2);
         stroke.setStrokeWidth((highlighted ? 3 : 1.5f) * dp);
         canvas.drawCircle(cx, cy, r, stroke);
-        text.setColor(highlighted ? ACTIVE : 0xff6b7782);
+        text.setColor(highlighted ? ACTIVE : LABEL);
         text.setTextSize(15 * dp);
         text.setFakeBoldText(highlighted);
         canvas.drawText(region.getName(), cx + r + 6 * dp, cy + 5 * dp, text);
+    }
+
+    /** Faint street-like grid so the panel reads as a map without real tiles. */
+    private void drawGrid(Canvas canvas) {
+        stroke.setColor(GRID);
+        stroke.setStrokeWidth(3 * dp);
+        float step = 64 * dp;
+        for (float x = step / 2; x < getWidth(); x += step) canvas.drawLine(x, 0, x, getHeight(), stroke);
+        for (float y = step / 2; y < getHeight(); y += step) canvas.drawLine(0, y, getWidth(), y, stroke);
     }
 
     private void drawPlace(Canvas canvas, Place place, int color) {
@@ -145,7 +158,7 @@ final class RouteMapView extends View {
         text.setTextSize(18 * dp);
         canvas.drawText(ellipsize(caption, card.width() - 2 * pad), card.left + pad, card.top + 30 * dp, text);
         text.setFakeBoldText(false);
-        text.setColor(0xff6b7782);
+        text.setColor(LABEL);
         text.setTextSize(13 * dp);
         canvas.drawText(ellipsize(sourceLabel, card.width() - 2 * pad), card.left + pad, card.top + 54 * dp, text);
     }
