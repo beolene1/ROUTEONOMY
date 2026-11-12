@@ -36,6 +36,7 @@ import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
 import com.routeonomy.app.pleos.NaviRouteProbe;
+import com.routeonomy.app.pleos.FusedLocationProbe;
 import com.routeonomy.app.pleos.NaviVoiceMonitor;
 import com.routeonomy.app.pleos.WindowAndFocusProbe;
 import com.routeonomy.app.simulation.FakeRouteInput;
@@ -59,6 +60,8 @@ public final class MainActivity extends Activity {
     private NaviRouteProbe naviProbe; // AVD experiment: real navi route/events
     private TextView naviProbeStatus;
     private WindowAndFocusProbe windowFocusProbe; // AVD experiment: adjacent navi window, audio focus
+    private FusedLocationProbe fusedProbe; // AVD experiment: Pleos FusedLocation + proximity alert
+    private Button fusedButton;
     private NaviVoiceMonitor naviVoiceMonitor; // AVD experiment: is navi voice guidance observable?
     private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
@@ -163,6 +166,9 @@ public final class MainActivity extends Activity {
             return kotlin.Unit.INSTANCE;
         });
         naviVoiceMonitor.start();
+        Region pangyo = null;
+        for (Region r : regions) if (r.getId().equals("pangyo")) pangyo = r;
+        fusedProbe = new FusedLocationProbe(this, pangyo, message -> { naviProbe.note(message); return kotlin.Unit.INSTANCE; });
         windowFocusProbe = new WindowAndFocusProbe(this, message -> { naviProbe.note(message); return kotlin.Unit.INSTANCE; });
     }
 
@@ -227,6 +233,7 @@ public final class MainActivity extends Activity {
         Button probeAdjacent=button("[실험] 내비 옆 창으로 열기"); probeAdjacent.setOnClickListener(v->windowFocusProbe.openNaviAdjacent()); probeRow2.addView(probeAdjacent,weight());
         Button probeFocus=button("[실험] 오디오 포커스 요청/반납"); probeFocus.setOnClickListener(v->windowFocusProbe.toggleFocus()); probeRow2.addView(probeFocus,weight());
         simulationPanel.addView(probeRow2);
+        fusedButton=button("[실험] Pleos 위치 수신 시작"); fusedButton.setOnClickListener(v->toggleFusedProbe()); simulationPanel.addView(fusedButton,full());
         naviProbeStatus=label(13,ink); naviProbeStatus.setText("내비 실험 대기"); simulationPanel.addView(naviProbeStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
@@ -482,6 +489,25 @@ public final class MainActivity extends Activity {
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }
+    private static final String FUSED_PERMISSION = "pleos.car.permission.FUSED_LOCATION";
+    private static final int FUSED_PERMISSION_REQUEST = 41;
+    private void toggleFusedProbe(){
+        if (fusedProbe.isRunning()) { fusedProbe.stop(); fusedButton.setText("[실험] Pleos 위치 수신 시작"); return; }
+        if (checkSelfPermission(FUSED_PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            naviProbe.note("위치 권한 요청 중");
+            requestPermissions(new String[]{FUSED_PERMISSION}, FUSED_PERMISSION_REQUEST);
+            return;
+        }
+        fusedProbe.start();
+        if (fusedProbe.isRunning()) fusedButton.setText("[실험] Pleos 위치 수신 중지");
+    }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != FUSED_PERMISSION_REQUEST) return;
+        boolean granted = results.length > 0 && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        naviProbe.note("위치 권한 " + (granted ? "허용됨" : "거부됨"));
+        if (granted) toggleFusedProbe();
+    }
     /** Window resized/moved (Pleos window bar): the activity is kept; log the new window for the experiment. */
     @Override public void onConfigurationChanged(android.content.res.Configuration config) {
         super.onConfigurationChanged(config);
@@ -491,5 +517,5 @@ public final class MainActivity extends Activity {
         super.onMultiWindowModeChanged(inMultiWindow, config);
         if (naviProbe != null) naviProbe.note("멀티윈도우 모드 변경: " + inMultiWindow);
     }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(fusedProbe!=null)fusedProbe.stop();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
 }
