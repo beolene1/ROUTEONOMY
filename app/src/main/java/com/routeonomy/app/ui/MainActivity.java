@@ -35,6 +35,7 @@ import com.routeonomy.app.domain.TripContext;
 import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
+import com.routeonomy.app.pleos.NaviRouteProbe;
 import com.routeonomy.app.simulation.FakeRouteInput;
 import com.routeonomy.app.simulation.FakeVehicleInput;
 import java.util.ArrayList;
@@ -53,6 +54,8 @@ public final class MainActivity extends Activity {
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
+    private NaviRouteProbe naviProbe; // AVD experiment: real navi route/events
+    private TextView naviProbeStatus;
     private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
@@ -150,6 +153,7 @@ public final class MainActivity extends Activity {
             (rawTime, meters) -> { runOnUiThread(() -> sdkStatus.setText("NaviHelper 응답 · remainTime(raw)=" + rawTime + " · remainDistance=" + meters + "m")); return kotlin.Unit.INSTANCE; },
             message -> { runOnUiThread(() -> sdkStatus.setText(message)); return kotlin.Unit.INSTANCE; });
         naviEtaClient.start();
+        naviProbe = new NaviRouteProbe(this, text -> { runOnUiThread(() -> naviProbeStatus.setText(text)); return kotlin.Unit.INSTANCE; });
     }
 
     private void buildUi() {
@@ -200,6 +204,16 @@ public final class MainActivity extends Activity {
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
+        // AVD experiment: does the Pleos navi accept our route and send route/location/arrival events?
+        Place destination = trip.getDestination();
+        Button probeRoute=button("[실험] 내비 경로 요청 → " + destination.getName());
+        probeRoute.setOnClickListener(v->naviProbe.requestRoute(destination.getLocation().getLatitude(), destination.getLocation().getLongitude(), destination.getName()));
+        simulationPanel.addView(probeRoute,full());
+        LinearLayout probeRow=new LinearLayout(this);
+        Button probeQuery=button("[실험] 내비 상태 조회"); probeQuery.setOnClickListener(v->naviProbe.queryState()); probeRow.addView(probeQuery,weight());
+        Button probeCancel=button("[실험] 경로 취소"); probeCancel.setOnClickListener(v->naviProbe.cancelRoute()); probeRow.addView(probeCancel,weight());
+        simulationPanel.addView(probeRow);
+        naviProbeStatus=label(13,ink); naviProbeStatus.setText("내비 실험 대기"); simulationPanel.addView(naviProbeStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
 
@@ -454,5 +468,5 @@ public final class MainActivity extends Activity {
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
 }
