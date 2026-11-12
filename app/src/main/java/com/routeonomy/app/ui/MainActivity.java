@@ -384,37 +384,46 @@ public final class MainActivity extends Activity {
         }
         homeShown = false;
         if (playbackPaused) { playbackPaused = false; speakCurrentChunk(); } // back from home: resume
-        else speakCurrent();
+        else {
+            // The banner topic plays first, whatever the remaining time.
+            BriefingSegment picked = dashboardTopic();
+            if (currentSegmentId == null && picked != null) { preferredFirstId = picked.getId(); replan(); }
+            speakCurrent();
+        }
         render();
     }
 
     private boolean canChangeDashboardTopic() {
         if (currentSegmentId != null) return false; // a topic is paused mid-way (opened home): keep it first
-        int topicCount = 0;
-        for (BriefingSegment segment : plan.getSegments()) {
-            if (segment.getType() == BriefingSegment.Type.MAIN && ++topicCount > 1) return true;
-        }
-        return false;
+        return dashboardTopics().size() > 1;
     }
 
-    /** MAIN topics of the current plan in content order: the pages of the dashboard topic banner. */
+    /**
+     * Pages of the dashboard topic banner: every MAIN topic not heard yet, in content order.
+     * Independent of location and remaining time (later: ordered by the user's interests).
+     */
     private List<BriefingSegment> dashboardTopics() {
         List<BriefingSegment> topics = new ArrayList<>();
-        for (BriefingSegment s : segments) if (s.getType() == BriefingSegment.Type.MAIN && plan.getSegments().contains(s)) topics.add(s);
+        for (BriefingSegment s : segments)
+            if (s.getType() == BriefingSegment.Type.MAIN && (!playedSegmentIds.contains(s.getId()) || s.getId().equals(currentSegmentId))) topics.add(s);
         return topics;
     }
 
-    /** Banner swipe / Change topic: brings the next (+1) or previous (-1) topic to the front of the plan. */
+    /** Topic shown on the dashboard: the paused one, else the banner pick, else the first page. */
+    private BriefingSegment dashboardTopic() {
+        if (currentSegmentId != null && !plan.getSegments().isEmpty()) return plan.getSegments().get(0);
+        List<BriefingSegment> topics = dashboardTopics();
+        for (BriefingSegment s : topics) if (s.getId().equals(preferredFirstId)) return s;
+        return topics.isEmpty() ? null : topics.get(0);
+    }
+
+    /** Banner swipe / Change topic: picks the next (+1) or previous (-1) page; it plays first on start. */
     private void shiftDashboardTopic(int delta) {
         if (!canChangeDashboardTopic()) return;
         List<BriefingSegment> topics = dashboardTopics();
-        int index = Math.max(0, topics.indexOf(plan.getSegments().get(0)));
-        BriefingSegment next = topics.get(Math.floorMod(index + delta, topics.size()));
-        List<BriefingSegment> reordered = new ArrayList<>(plan.getSegments());
-        reordered.remove(next);
-        reordered.add(0, next);
-        plan = new BriefingPlan(reordered);
-        preferredFirstId = next.getId();
+        int index = Math.max(0, topics.indexOf(dashboardTopic()));
+        preferredFirstId = topics.get(Math.floorMod(index + delta, topics.size())).getId();
+        replan();
         render();
     }
 
@@ -529,7 +538,8 @@ public final class MainActivity extends Activity {
         nowPlaying.setDriving(driving);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         List<BriefingSegment> topics = dashboardTopics();
-        dashboard.bindTopic(current, canChangeDashboardTopic(), Math.max(0, topics.indexOf(current)), topics.size());
+        BriefingSegment shownTopic = dashboardTopic();
+        dashboard.bindTopic(shownTopic, canChangeDashboardTopic(), Math.max(0, topics.indexOf(shownTopic)), topics.size());
         String route = routeStatusText();
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
@@ -655,9 +665,12 @@ public final class MainActivity extends Activity {
         List<BriefingSegment> queue = new ArrayList<>();
         if (current != null) queue.add(current);
         queue.addAll(next.getSegments());
-        if (current == null && preferredFirstId != null) {
-            // Keep the topic picked on the pre-drive dashboard first until playback starts.
-            for (int i = 0; i < queue.size(); i++) if (queue.get(i).getId().equals(preferredFirstId)) { queue.add(0, queue.remove(i)); break; }
+        if (current == null && preferredFirstId != null && !playedSegmentIds.contains(preferredFirstId)) {
+            // Keep the topic picked on the dashboard banner first until playback starts,
+            // adding it even when the remaining-time budget left it out.
+            boolean moved = false;
+            for (int i = 0; i < queue.size(); i++) if (queue.get(i).getId().equals(preferredFirstId)) { queue.add(0, queue.remove(i)); moved = true; break; }
+            if (!moved) for (BriefingSegment s : segments) if (s.getId().equals(preferredFirstId)) { queue.add(0, s); break; }
         }
         plan = new BriefingPlan(queue);
     }
