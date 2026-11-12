@@ -203,7 +203,7 @@ public final class MainActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
         nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
-                this::previousTopic, () -> advanceBriefing(false), this::toggleSimulationFromCard);
+                this::previousTopic, this::nextTopic, this::toggleSimulationFromCard);
         root.addView(nowPlaying, full());
         playbackStatus = nowPlaying.playbackStatusView();
         // P only: script, discoveries, quiz entry and tools below the Now Playing card.
@@ -335,7 +335,7 @@ public final class MainActivity extends Activity {
 
     /** Home button / system back on the briefing screen: confirm first when audio is in progress. */
     private void requestHome() {
-        if (playbackActive || playbackPaused) { homeConfirm.show(this::goHome); updateBackCallback(); }
+        if (playbackActive) { homeConfirm.show(this::goHome); updateBackCallback(); }
         else goHome();
     }
 
@@ -388,15 +388,16 @@ public final class MainActivity extends Activity {
         if (playbackPaused) { playbackPaused = false; speakCurrentChunk(); } // back from home: resume
         else {
             // The banner topic plays first, whatever the remaining time.
+            // Only before the first start: afterwards the route decides (e.g. a region entered while home).
             BriefingSegment picked = dashboardTopic();
-            if (currentSegmentId == null && picked != null) { preferredFirstId = picked.getId(); replan(); }
+            if (!briefingStarted && picked != null) { preferredFirstId = picked.getId(); replan(); }
             speakCurrent();
         }
         render();
     }
 
     private boolean canChangeDashboardTopic() {
-        if (currentSegmentId != null) return false; // a topic is paused mid-way (opened home): keep it first
+        if (briefingStarted) return false; // after the first start the route decides the order
         return dashboardTopics().size() > 1;
     }
 
@@ -411,9 +412,9 @@ public final class MainActivity extends Activity {
         return topics;
     }
 
-    /** Topic shown on the dashboard: the paused one, else the banner pick, else the first page. */
+    /** Topic shown on the dashboard: after the first start the plan head, else the banner pick or first page. */
     private BriefingSegment dashboardTopic() {
-        if (currentSegmentId != null && !plan.getSegments().isEmpty()) return plan.getSegments().get(0);
+        if (briefingStarted) return plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         List<BriefingSegment> topics = dashboardTopics();
         for (BriefingSegment s : topics) if (s.getId().equals(preferredFirstId)) return s;
         return topics.isEmpty() ? null : topics.get(0);
@@ -698,6 +699,11 @@ public final class MainActivity extends Activity {
      * "이전 주제": replays the topic started before the current one from its start; the interrupted
      * topic goes back to the queue. With no earlier topic, restarts the current one.
      */
+    /** "다음 주제": skips the topic being played; before anything started it does nothing (no silent skip). */
+    private void nextTopic(){
+        if (currentSegmentId == null) return;
+        advanceBriefing(false);
+    }
     private void previousTopic(){
         if (!ttsReady) { playbackStatus.setText("Pleos TTS 준비 중"); return; }
         if (playHistory.isEmpty()) return; // nothing played yet
@@ -726,14 +732,17 @@ public final class MainActivity extends Activity {
     }
     private void speakCurrent(){
         if(!ttsReady) { playbackStatus.setText("TTS를 사용할 수 없습니다"); return; }
+        String requestedFirst = preferredFirstId; // e.g. "이전 주제": must survive a pending region switch
         preferredFirstId=null;
         String switchTo = regionTransition.consumePendingSwitch();
         if (switchTo != null) {
+            preferredFirstId = requestedFirst;
             // Playback stopped (e.g. TTS error) while a switch was pending: drop the interrupted A segment.
             if (currentSegmentId != null) playedSegmentIds.add(currentSegmentId);
             currentSegmentId = null;
             startRegionSection(switchTo);
             replan();
+            preferredFirstId = null;
         }
         if(plan==null||plan.getSegments().isEmpty()) {
             if (regionSectionId == null && prediction != null) {

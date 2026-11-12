@@ -34,6 +34,7 @@ final class PreDriveDashboard extends LinearLayout {
     private final Runnable onNext;
     private final Runnable onPrevious;
     private boolean canChangeTopic;
+    private int dotsPosition = -1, dotsCount = -1;
 
     /** @param windowWidth width in dp of the column the dashboard is shown in (not the whole window). */
     PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onNext, Runnable onPrevious,
@@ -112,6 +113,9 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private void bindDots(int position, int count) {
+        if (position == dotsPosition && count == dotsCount) return; // render() runs on every location fix
+        dotsPosition = position;
+        dotsCount = count;
         dots.removeAllViews();
         dots.setVisibility(count > 1 ? VISIBLE : GONE);
         for (int i = 0; i < count && count > 1; i++) {
