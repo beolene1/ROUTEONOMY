@@ -157,10 +157,12 @@ final class QuizScreen extends LinearLayout {
                 line.setBaselineAligned(false);
                 choices.addView(line, matchWrap(14));
             }
-            View cell = i < options.size()
-                    ? choiceCard(i, options.get(i), current.getAnswerIndex(), selected)
-                    : new View(getContext());
-            LayoutParams params = new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f);
+            boolean filler = i >= options.size();
+            View cell = filler ? new View(getContext())
+                    : choiceCard(i, options.get(i), current.getAnswerIndex(), selected);
+            // Cards match the row height; the empty D slot must not (a plain View given MATCH_PARENT
+            // inside a ScrollView takes the whole remaining height and pushes the buttons off screen).
+            LayoutParams params = new LayoutParams(0, filler ? 0 : LayoutParams.MATCH_PARENT, 1f);
             if (i % 2 == 1) params.setMarginStart(style.size(22));
             line.addView(cell, params);
         }
