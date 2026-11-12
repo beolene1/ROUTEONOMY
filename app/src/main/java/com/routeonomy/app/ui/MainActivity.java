@@ -111,6 +111,8 @@ public final class MainActivity extends Activity {
     private boolean quizEmptyNotice;
     private String renderedQuizKey;
     private QuizScreen quizScreen;
+    private ArrivalPopup arrivalPopup;
+    private boolean arrivalCelebrated; // the popup is shown once per app run
     private ScrollView quizScroll;
 
     @Override public void onCreate(Bundle state) {
@@ -247,6 +249,12 @@ public final class MainActivity extends Activity {
         appArea.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(quizScroll, new FrameLayout.LayoutParams(-1, -1));
+        arrivalPopup = new ArrivalPopup(this, () -> {
+            pausePlayback();
+            arrivalPopup.hide();
+            startQuiz();
+        }, () -> arrivalPopup.hide());
+        appArea.addView(arrivalPopup, new FrameLayout.LayoutParams(-1, -1));
         routeMap = new RouteMapView(this);
         routeMap.setRoute(routePoints, trip.getCurrent(), trip.getDestination(), regions);
         screen = new LinearLayout(this);
@@ -292,11 +300,15 @@ public final class MainActivity extends Activity {
     private void togglePlayback() {
         if (!ttsReady) { playbackStatus.setText("Pleos TTS 준비 중"); return; }
         if (playbackPaused) { playbackPaused = false; speakCurrentChunk(); }
-        else if (playbackActive) {
-            playbackPaused = true; playbackActive = false; tts.stop();
-            playbackStatus.setText("일시정지됨 · 현재 문장 처음부터 재개");
-            nowPlaying.setPlaying(false);
-        } else speakCurrent();
+        else if (playbackActive) pausePlayback();
+        else speakCurrent();
+    }
+
+    private void pausePlayback() {
+        if (!playbackActive) return;
+        playbackPaused = true; playbackActive = false; tts.stop();
+        playbackStatus.setText("일시정지됨 · 현재 문장 처음부터 재개");
+        nowPlaying.setPlaying(false);
     }
 
     private TextView infoCard(UiStyle style) {
@@ -485,7 +497,13 @@ public final class MainActivity extends Activity {
         enterButton.setText((target == null ? "지역" : target.getName()) + " 진입");
         enterButton.setEnabled(target != null);
         boolean quizAllowed = session.canStartQuiz();
-        if (!quizAllowed) { quiz = null; quizEmptyNotice = false; } // left P or arrival was cleared: stop the quiz
+        if (!quizAllowed) { quiz = null; quizEmptyNotice = false; arrivalPopup.hide(); } // left P or arrival was cleared: stop the quiz
+        else if (!arrivalCelebrated) {
+            // First time arrival and P hold together: praise, then offer the quiz.
+            arrivalCelebrated = true;
+            arrivalPopup.show(completedSegmentIds.size(),
+                    !QuizSession.fromCompleted(quizQuestions, completedSegmentIds).isEmpty());
+        }
         quizButton.setVisibility(driving || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
         quizButton.setText(quiz != null && quizHidden && !quiz.isFinished() ? "퀴즈 이어 풀기" : "도착 후 퀴즈 시작");
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
