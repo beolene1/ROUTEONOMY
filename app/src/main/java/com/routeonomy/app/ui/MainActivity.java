@@ -240,7 +240,7 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext);
+        quizScreen = new QuizScreen(this, this::requestHome, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext);
         quizScreen.setPadding(style.size(28), style.size(24), style.size(28), style.size(24));
         quizScroll = new ScrollView(this);
         quizScroll.setFillViewport(true);

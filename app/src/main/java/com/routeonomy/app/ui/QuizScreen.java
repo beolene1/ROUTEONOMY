@@ -42,7 +42,7 @@ final class QuizScreen extends LinearLayout {
     private Integer pending;
     private String note; // hint or help text kept while the user picks a choice
 
-    QuizScreen(Context context, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext) {
+    QuizScreen(Context context, Runnable onHome, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext) {
         super(context);
         this.onSubmit = onSubmit;
         this.onNext = onNext;
@@ -50,10 +50,15 @@ final class QuizScreen extends LinearLayout {
         setOrientation(VERTICAL);
 
         addView(style.appHeader(false), matchWrap(0));
+        TextView home = style.action("← 홈으로", false, onHome);
+        home.setContentDescription("홈 화면으로 가기");
+        LayoutParams homeParams = new LayoutParams(LayoutParams.WRAP_CONTENT, style.size(44));
+        homeParams.topMargin = style.size(12);
+        addView(home, homeParams);
         intro = style.text("", 19, UiStyle.INK, false);
         intro.setGravity(Gravity.CENTER);
         intro.setLineSpacing(style.size(4), 1f);
-        addView(intro, matchWrap(24));
+        addView(intro, matchWrap(12));
 
         LinearLayout progress = row();
         progressLabel = style.text("", 18, UiStyle.MUTED, false);
