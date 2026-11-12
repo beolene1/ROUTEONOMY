@@ -29,7 +29,7 @@ class FusedLocationSource(context: Context, private val fences: List<Geofence>, 
 
     private val fused = FusedLocation(context.applicationContext)
     private val alertIds = mutableListOf<String>()
-    private var running = false
+    @Volatile private var running = false
 
     private val locationListener = object : FusedLocationListener {
         override fun onChanged(location: LocationData?) {
@@ -45,11 +45,12 @@ class FusedLocationSource(context: Context, private val fences: List<Geofence>, 
         if (!fused.isSupported()) { listener.onStatus("Pleos 위치 서비스 없음"); return }
         try {
             fused.initialize()
+            running = true // from here on stop() must undo whatever got registered
             fused.registerFusedLocationCallback(locationListener)
             fences.forEach(::addAlert)
-            running = true
             listener.onStatus("Pleos 위치 수신 중")
         } catch (e: Exception) {
+            stop()
             listener.onStatus("Pleos 위치 시작 실패: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
@@ -60,7 +61,12 @@ class FusedLocationSource(context: Context, private val fences: List<Geofence>, 
             ProximityAlertRequest(fence.center.latitude, fence.center.longitude, fence.radiusMeters.toFloat(),
                 setOf(ProximityTransition.ENTER, ProximityTransition.EXIT)),
             object : ProximityAlertListener {
-                override fun onRegistered(alertId: String) { synchronized(alertIds) { alertIds += alertId } }
+                override fun onRegistered(alertId: String) {
+                    synchronized(alertIds) {
+                        if (running) alertIds += alertId
+                        else runCatching { fused.removeProximityAlert(alertId) } // confirmed after stop()
+                    }
+                }
                 override fun onTransition(event: ProximityAlertEvent) =
                     listener.onFenceTransition(fence.id, event.transition == ProximityTransition.ENTER)
                 override fun onError(exception: Exception) = listener.onStatus("근접 알림 오류(${fence.id}): ${exception.message}")
@@ -69,12 +75,13 @@ class FusedLocationSource(context: Context, private val fences: List<Geofence>, 
     }
 
     fun stop() {
-        if (!running) return
-        runCatching {
-            synchronized(alertIds) { alertIds.forEach(fused::removeProximityAlert); alertIds.clear() }
-            fused.unregisterFusedLocationCallback(locationListener)
+        synchronized(alertIds) {
+            if (!running) return
+            running = false
+            alertIds.forEach { runCatching { fused.removeProximityAlert(it) } }
+            alertIds.clear()
         }
+        runCatching { fused.unregisterFusedLocationCallback(locationListener) }
         runCatching { fused.release() }
-        running = false
     }
 }

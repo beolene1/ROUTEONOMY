@@ -32,6 +32,7 @@ final class RouteMapView extends View {
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint text = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Path path = new Path();
+    private final RectF card = new RectF();
     private List<GeoPoint> route = new ArrayList<>();
     private List<Region> regions = new ArrayList<>();
     private Place origin, destination;
@@ -136,7 +137,7 @@ final class RouteMapView extends View {
 
     private void drawCaption(Canvas canvas) {
         float pad = 16 * dp;
-        RectF card = new RectF(pad, pad, getWidth() - pad, 84 * dp);
+        card.set(pad, pad, getWidth() - pad, 84 * dp);
         fill.setColor(0xf2ffffff);
         canvas.drawRoundRect(card, 14 * dp, 14 * dp, fill);
         text.setColor(INK);

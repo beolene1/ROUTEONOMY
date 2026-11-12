@@ -340,14 +340,19 @@ public final class MainActivity extends Activity {
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
     private void onRealLocation(GeoPoint point) {
+        // The first real fix replaces the simulated start: fences count only after a real fix outside them.
+        // Until then the simulation buttons keep working as a backup.
+        if (lastRealFix == null) geofenceGate.reset();
         lastRealFix = point;
         applyLocation(point);
     }
     /** Pleos proximity alert; the gate drops registration-time and duplicate events. */
     private void onProximityAlert(String fenceId, boolean entered) {
-        lastAlert = fenceName(fenceId) + (entered ? " 진입" : " 이탈");
+        if (lastRealFix == null) return; // registration-time alert before the first real fix
         boolean accepted = entered ? geofenceGate.onEnter(fenceId) : geofenceGate.onExit(fenceId);
-        if (accepted && handleFence(fenceId, entered)) render();
+        if (!accepted) return;
+        lastAlert = fenceName(fenceId) + (entered ? " 진입" : " 이탈");
+        if (handleFence(fenceId, entered)) render();
         else refreshRoute();
     }
     /** Position update from Pleos FusedLocation or the simulation buttons: same path for both. */
@@ -362,7 +367,7 @@ public final class MainActivity extends Activity {
     /** Applies one accepted entry/exit. Returns true when it already replanned (region switch started now). */
     private boolean handleFence(String fenceId, boolean entered) {
         if (Geofence.DESTINATION_ID.equals(fenceId)) {
-            fake.markArrived(entered); // leaving the destination again clears arrival
+            if (entered) fake.markArrived(true); // sticky: GPS jitter at the edge must not drop a quiz in progress
             return false;
         }
         if (!entered || !regionTransition.onRegionEntered(fenceId)) return false;
@@ -651,8 +656,6 @@ public final class MainActivity extends Activity {
             requestPermissions(new String[]{FusedLocationSource.PERMISSION}, FUSED_PERMISSION_REQUEST);
             return;
         }
-        // Real tracking replaces the simulated start: entries count only after a fix outside the fence.
-        geofenceGate.reset();
         locationSource.start();
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
