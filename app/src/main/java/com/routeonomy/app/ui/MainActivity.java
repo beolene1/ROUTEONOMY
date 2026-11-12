@@ -73,6 +73,9 @@ public final class MainActivity extends Activity {
     private boolean playbackActive;
     private List<String> currentChunks = java.util.Collections.emptyList();
     private int chunkIndex;
+    // "공부 진행 시간": time spent on sentences spoken to the end.
+    private long studyMillis;
+    private long chunkStartedAt;
     private String currentSegmentId;
     // Route-aware briefing (F2/F3/F5): A section before a region, B section after entering it.
     private final RegionTransition regionTransition = new RegionTransition();
@@ -192,7 +195,8 @@ public final class MainActivity extends Activity {
         briefingScroll.setFillViewport(true);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
-        nowPlaying = new NowPlayingCard(this, () -> { toolsOpen = false; render(); }, this::togglePlayback, () -> advanceBriefing(false));
+        nowPlaying = new NowPlayingCard(this, () -> { toolsOpen = false; render(); }, this::togglePlayback,
+                () -> advanceBriefing(false), this::toggleSimulationFromCard);
         root.addView(nowPlaying, full());
         playbackStatus = nowPlaying.playbackStatusView();
         // P only: script, discoveries, quiz entry and tools below the Now Playing card.
@@ -276,6 +280,13 @@ public final class MainActivity extends Activity {
         dashboardScroll.addView(dashboard);
         CharSequence status = playbackStatus.getText();
         if (!ttsReady && status.toString().startsWith("Pleos")) dashboard.showStatus(status); // keep a TTS failure notice
+    }
+
+    private void toggleSimulationFromCard() {
+        simulationOpen = !simulationOpen;
+        debugToggleButton.setText(simulationOpen ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
+        render();
+        if (simulationOpen) briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, debugToggleButton.getTop()));
     }
 
     private void togglePlayback() {
@@ -452,9 +463,9 @@ public final class MainActivity extends Activity {
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
         String route = routeStatusText();
-        boolean playingCurrent = current != null && current.getId().equals(currentSegmentId);
-        nowPlaying.bind(current, route.substring(route.indexOf('\n') + 1), session.etaMinutes(),
-                playingCurrent ? chunkIndex : 0, playingCurrent ? currentChunks.size() : 0);
+        float tripProgress = 1f - session.etaMinutes() / (float) Math.max(1, trip.getRemainingMinutes());
+        nowPlaying.bind(current, current == null ? null : firstSentence(current.getScript()),
+                (int) (studyMillis / 60_000), session.etaMinutes(), tripProgress);
         String mapRegion = regionTransition.enteredRegionId() != null ? regionTransition.enteredRegionId()
                 : prediction != null ? prediction.getRegion().getId() : null;
         routeMap.setState(currentLocation, mapRegion, regionTransition.enteredRegionId() != null,
@@ -610,6 +621,10 @@ public final class MainActivity extends Activity {
         chunkIndex=0;
         speakCurrentChunk();
     }
+    private String firstSentence(String script) {
+        List<String> sentences = splitIntoChunks(script);
+        return sentences.isEmpty() ? "" : sentences.get(0);
+    }
     private List<String> splitIntoChunks(String script) {
         List<String> chunks = new java.util.ArrayList<>();
         for (String part : script.split("(?<=[.!?。！？])\\s*")) if (!part.trim().isEmpty()) chunks.add(part.trim());
@@ -622,10 +637,12 @@ public final class MainActivity extends Activity {
         briefingStarted = true;
         playbackStatus.setText("Pleos TTS 재생 중");
         render(); // Now Playing title, sentence progress and pause icon
+        chunkStartedAt = android.os.SystemClock.elapsedRealtime();
         tts.speak(currentChunks.get(chunkIndex), true);
     }
     private void onChunkDone() {
         if (!playbackActive || playbackPaused || currentSegmentId == null) return;
+        studyMillis += android.os.SystemClock.elapsedRealtime() - chunkStartedAt;
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }

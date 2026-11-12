@@ -13,7 +13,6 @@ import android.widget.TextView;
 import com.routeonomy.app.R;
 import com.routeonomy.app.domain.BriefingSegment;
 
-import java.time.LocalDate;
 
 final class PreDriveDashboard extends LinearLayout {
     private static final int BACKGROUND = UiStyle.BACKGROUND;
@@ -103,35 +102,7 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private LinearLayout header() {
-        LinearLayout header = row();
-        View logo = new View(getContext());
-        logo.setBackground(shape(UiStyle.LOGO, 5));
-        header.addView(logo, new LayoutParams(size(34), size(34)));
-        TextView brand = text("ROUTEONOMY", 20, MUTED, false);
-        LayoutParams brandParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-        brandParams.setMarginStart(size(12));
-        header.addView(brand, brandParams);
-        header.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
-
-        LinearLayout morning = row();
-        morning.setBackground(shape(NEUTRAL, 17));
-        morning.setPadding(size(10), 0, size(10), 0);
-        morning.addView(picture(R.drawable.pre_drive_morning), new LayoutParams(size(26), size(26)));
-        TextView morningLabel = text(narrow ? "Morning" : "Morning mode", 20, MUTED, false);
-        morning.addView(morningLabel);
-        header.addView(morning, new LayoutParams(LayoutParams.WRAP_CONTENT, size(34)));
-        header.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
-
-        if (!narrow) {
-            header.addView(pill(LocalDate.now().toString(), MUTED, NEUTRAL, 20));
-        }
-        FrameLayout profile = new FrameLayout(getContext());
-        profile.setBackground(shape(NEUTRAL, 17));
-        place(profile, picture(R.drawable.pre_drive_profile), 13, 13, Gravity.CENTER);
-        LayoutParams profileParams = new LayoutParams(size(34), size(34));
-        profileParams.setMarginStart(size(16));
-        header.addView(profile, profileParams);
-        return header;
+        return style.appHeader(narrow);
     }
 
     private LinearLayout greeting() {

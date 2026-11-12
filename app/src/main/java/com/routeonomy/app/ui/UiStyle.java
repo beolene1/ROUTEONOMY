@@ -6,8 +6,14 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import com.routeonomy.app.R;
+
+import java.time.LocalDate;
 
 /** Shared look of the Figma screens (dashboard, Now Playing, quiz): palette, cards, pills, text. */
 final class UiStyle {
@@ -18,6 +24,11 @@ final class UiStyle {
     static final int GREEN = 0xff256a49;
     static final int MINT = 0xffd7ebe0;
     static final int LOGO = 0xff6c9181;
+    /** Sage green of progress bars and the level gear in the Korean mocks. */
+    static final int SAGE = 0xff6c9181;
+    static final int SURFACE = 0xfff7f7f2;
+    static final int LIVE = 0xffd0473d;
+    static final int PLAYER = 0xff333532;
 
     private final Context context;
     private final float scale;
@@ -75,6 +86,61 @@ final class UiStyle {
         params.setMarginStart(size(10));
         pill.addView(brand, params);
         return pill;
+    }
+
+    ImageView picture(int resource) {
+        ImageView image = new ImageView(context);
+        image.setImageResource(resource);
+        image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        return image;
+    }
+
+    /** Round neutral button holding an icon or a short glyph. */
+    FrameLayout iconButton(View icon, int iconSize, String label, Runnable click) {
+        FrameLayout button = new FrameLayout(context);
+        button.setBackground(shape(NEUTRAL, 25));
+        button.setContentDescription(label);
+        clickable(button, click);
+        button.addView(icon, new FrameLayout.LayoutParams(size(iconSize), size(iconSize), Gravity.CENTER));
+        return button;
+    }
+
+    /** Top bar shared by the dashboard, Now Playing and quiz: logo, Morning mode, date, profile. */
+    LinearLayout appHeader(boolean narrow) {
+        LinearLayout header = new LinearLayout(context);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        View logo = new View(context);
+        logo.setBackground(shape(LOGO, 5));
+        header.addView(logo, new LinearLayout.LayoutParams(size(34), size(34)));
+        TextView brand = text("ROUTEONOMY", 20, MUTED, false);
+        LinearLayout.LayoutParams brandParams = wrapParams();
+        brandParams.setMarginStart(size(12));
+        header.addView(brand, brandParams);
+        header.addView(new View(context), new LinearLayout.LayoutParams(0, 1, 1f));
+
+        LinearLayout morning = new LinearLayout(context);
+        morning.setGravity(Gravity.CENTER_VERTICAL);
+        morning.setBackground(shape(NEUTRAL, 17));
+        morning.setPadding(size(10), 0, size(10), 0);
+        morning.addView(picture(R.drawable.pre_drive_morning), new LinearLayout.LayoutParams(size(26), size(26)));
+        morning.addView(text(narrow ? "Morning" : "Morning mode", 20, MUTED, false));
+        header.addView(morning, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, size(34)));
+        header.addView(new View(context), new LinearLayout.LayoutParams(0, 1, 1f));
+
+        if (!narrow) header.addView(pill(LocalDate.now().toString(), MUTED, NEUTRAL, 20));
+        FrameLayout profile = new FrameLayout(context);
+        profile.setBackground(shape(NEUTRAL, 17));
+        profile.addView(picture(R.drawable.pre_drive_profile),
+                new FrameLayout.LayoutParams(size(13), size(13), Gravity.CENTER));
+        LinearLayout.LayoutParams profileParams = new LinearLayout.LayoutParams(size(34), size(34));
+        profileParams.setMarginStart(size(16));
+        header.addView(profile, profileParams);
+        return header;
+    }
+
+    LinearLayout.LayoutParams wrapParams() {
+        return new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
     }
 
     /** Makes a plain view behave as a button (ripple, focus, click, accessibility role). */
