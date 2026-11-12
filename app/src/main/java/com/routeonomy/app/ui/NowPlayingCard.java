@@ -37,7 +37,8 @@ final class NowPlayingCard extends LinearLayout {
         setOrientation(VERTICAL);
 
         addView(style.appHeader(false), matchWrap(0));
-        backButton = style.action("← 주행 전 화면", false, onBack);
+        backButton = style.action("← 홈으로", false, onBack);
+        backButton.setContentDescription("홈 화면으로 가기");
         LayoutParams backParams = new LayoutParams(LayoutParams.WRAP_CONTENT, style.size(44));
         backParams.topMargin = style.size(12);
         addView(backButton, backParams);
@@ -151,11 +152,10 @@ final class NowPlayingCard extends LinearLayout {
         playButton.setContentDescription(playing ? "일시정지" : "재생");
     }
 
-    /** D: only play/pause stays (F6). P: back to dashboard (when allowed), next topic and tools. */
-    void setDriving(boolean driving, boolean canGoBack) {
+    /** D: play/pause and home only (F6). P: also next topic and tools. */
+    void setDriving(boolean driving) {
         nextButton.setVisibility(driving ? GONE : VISIBLE);
         settingsButton.setVisibility(driving ? INVISIBLE : VISIBLE);
-        backButton.setVisibility(!driving && canGoBack ? VISIBLE : GONE);
     }
 
     /** Audio wave mark: five rounded bars. */

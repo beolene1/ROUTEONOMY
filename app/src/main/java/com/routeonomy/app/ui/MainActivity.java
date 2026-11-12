@@ -112,6 +112,9 @@ public final class MainActivity extends Activity {
     private String renderedQuizKey;
     private QuizScreen quizScreen;
     private ArrivalPopup arrivalPopup;
+    private ConfirmPopup homeConfirm;
+    // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
+    private boolean homeShown;
     private boolean arrivalCelebrated; // the popup is shown once per app run
     private ScrollView quizScroll;
 
@@ -197,7 +200,7 @@ public final class MainActivity extends Activity {
         briefingScroll.setFillViewport(true);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
-        nowPlaying = new NowPlayingCard(this, () -> { toolsOpen = false; render(); }, this::togglePlayback,
+        nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
                 () -> advanceBriefing(false), this::toggleSimulationFromCard);
         root.addView(nowPlaying, full());
         playbackStatus = nowPlaying.playbackStatusView();
@@ -253,8 +256,11 @@ public final class MainActivity extends Activity {
             pausePlayback();
             arrivalPopup.hide();
             startQuiz();
-        }, () -> arrivalPopup.hide());
+        }, () -> { arrivalPopup.hide(); updateBackCallback(); });
         appArea.addView(arrivalPopup, new FrameLayout.LayoutParams(-1, -1));
+        homeConfirm = new ConfirmPopup(this, "홈 화면으로 갈까요?",
+                "홈 화면으로 가면 음성 재생이 멈춥니다.\n그래도 홈으로 가시겠습니까?", "뒤로가기");
+        appArea.addView(homeConfirm, new FrameLayout.LayoutParams(-1, -1));
         routeMap = new RouteMapView(this);
         routeMap.setRoute(routePoints, trip.getCurrent(), trip.getDestination(), regions);
         screen = new LinearLayout(this);
@@ -325,7 +331,46 @@ public final class MainActivity extends Activity {
         return params;
     }
 
+    /** Home button / system back on the briefing screen: confirm first when audio is in progress. */
+    private void requestHome() {
+        if (playbackActive || playbackPaused) { homeConfirm.show(this::goHome); updateBackCallback(); }
+        else goHome();
+    }
+
+    private void goHome() {
+        pausePlayback(); // resumes from the current sentence via the dashboard start button
+        homeShown = true;
+        toolsOpen = false;
+        quizHidden = quiz != null || quizHidden;
+        render();
+    }
+
+    // System back (targetSdk 37: predictive back, onBackPressed is not called). Registered only while
+    // back has an in-app meaning; on the home screen the system default (leave the app) applies.
+    private Object backCallback;
+    private boolean backRegistered;
+    private void updateBackCallback() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return;
+        boolean want = homeConfirm.isShowing() || arrivalPopup.isShowing() || dashboardScroll.getVisibility() != View.VISIBLE;
+        if (want == backRegistered) return;
+        if (backCallback == null) backCallback = (android.window.OnBackInvokedCallback) this::onSystemBack;
+        android.window.OnBackInvokedDispatcher dispatcher = getOnBackInvokedDispatcher();
+        if (want) dispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                (android.window.OnBackInvokedCallback) backCallback);
+        else dispatcher.unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) backCallback);
+        backRegistered = want;
+    }
+    private void onSystemBack() {
+        if (homeConfirm.isShowing()) homeConfirm.hide();
+        else if (arrivalPopup.isShowing()) arrivalPopup.hide();
+        else if (dashboardScroll.getVisibility() == View.VISIBLE) moveTaskToBack(true); // already home
+        else if (quiz != null && !quizHidden) closeQuiz();
+        else requestHome();
+        updateBackCallback();
+    }
+
     private void openTools(boolean showSimulation) {
+        homeShown = false;
         toolsOpen = true;
         simulationOpen = showSimulation;
         debugToggleButton.setText(showSimulation ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
@@ -337,10 +382,14 @@ public final class MainActivity extends Activity {
             dashboard.showStatus(playbackStatus.getText());
             return;
         }
-        speakCurrent();
+        homeShown = false;
+        if (playbackPaused) { playbackPaused = false; speakCurrentChunk(); } // back from home: resume
+        else speakCurrent();
+        render();
     }
 
     private boolean canChangeDashboardTopic() {
+        if (currentSegmentId != null) return false; // a topic is paused mid-way (opened home): keep it first
         int topicCount = 0;
         for (BriefingSegment segment : plan.getSegments()) {
             if (segment.getType() == BriefingSegment.Type.MAIN && ++topicCount > 1) return true;
@@ -409,7 +458,7 @@ public final class MainActivity extends Activity {
         startRegionSection(fenceId);
         replan();
         render();
-        if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
+        if (briefingStarted && !homeShown && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
         return true;
     }
     private String fenceName(String fenceId) {
@@ -429,7 +478,7 @@ public final class MainActivity extends Activity {
             // Passed the expected region, or the new estimate leaves room for more A segments: resume.
             waitingForRegion = false;
             render();
-            if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
+            if (briefingStarted && !homeShown && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
             return;
         }
         render();
@@ -467,11 +516,11 @@ public final class MainActivity extends Activity {
     private void render(){
         boolean driving = session.isDriving();
         boolean preDrive = !driving && !briefingStarted && !session.canStartQuiz();
-        boolean showDashboard = preDrive && !toolsOpen;
+        boolean showDashboard = (preDrive && !toolsOpen) || homeShown;
         dashboardScroll.setVisibility(showDashboard ? View.VISIBLE : View.GONE);
         // Quiz state is settled further down (it may be dropped); the screens are switched in renderQuiz().
         briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
-        nowPlaying.setDriving(driving, preDrive);
+        nowPlaying.setDriving(driving);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
         String route = routeStatusText();
@@ -518,9 +567,11 @@ public final class MainActivity extends Activity {
         renderQuiz();
         if (!playbackPaused && !playbackActive && !waitingForRegion && playbackStatus != null && !playbackStatus.getText().toString().startsWith("재생 완료") && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
         nowPlaying.setPlaying(playbackActive);
+        updateBackCallback();
     }
     private void startQuiz(){
         if (!session.canStartQuiz()) return;
+        homeShown = false; // e.g. from the arrival popup shown over the home screen
         if (quiz != null && quizHidden && !quiz.isFinished()) { quizHidden = false; render(); return; } // resume
         QuizSession next = QuizSession.fromCompleted(quizQuestions, completedSegmentIds);
         if (next.isEmpty()) {
@@ -555,7 +606,7 @@ public final class MainActivity extends Activity {
         renderQuiz();
     }
     private void renderQuiz(){
-        boolean showQuiz = quiz != null && !quizHidden;
+        boolean showQuiz = quiz != null && !quizHidden && !homeShown;
         quizScroll.setVisibility(showQuiz ? View.VISIBLE : View.GONE);
         if (showQuiz) briefingScroll.setVisibility(View.GONE);
         // render() runs on many unrelated events; rebind only when the quiz state changed.
