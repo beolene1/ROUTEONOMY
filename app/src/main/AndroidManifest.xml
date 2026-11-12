@@ -24,7 +24,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Routeonomy">
-        <activity android:name=".ui.MainActivity" android:exported="true">
+        <!-- Keep playback/session state when the Pleos window bar resizes or moves the app window. -->
+        <activity android:name=".ui.MainActivity" android:exported="true"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation">
             <meta-data android:name="distractionOptimized" android:value="true"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

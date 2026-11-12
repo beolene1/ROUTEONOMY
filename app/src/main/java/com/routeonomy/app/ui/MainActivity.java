@@ -482,5 +482,14 @@ public final class MainActivity extends Activity {
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }
+    /** Window resized/moved (Pleos window bar): the activity is kept; log the new window for the experiment. */
+    @Override public void onConfigurationChanged(android.content.res.Configuration config) {
+        super.onConfigurationChanged(config);
+        if (naviProbe != null) naviProbe.note("창 변경: " + config.screenWidthDp + "x" + config.screenHeightDp + "dp, 멀티윈도우=" + isInMultiWindowMode());
+    }
+    @Override public void onMultiWindowModeChanged(boolean inMultiWindow, android.content.res.Configuration config) {
+        super.onMultiWindowModeChanged(inMultiWindow, config);
+        if (naviProbe != null) naviProbe.note("멀티윈도우 모드 변경: " + inMultiWindow);
+    }
     @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
 }
