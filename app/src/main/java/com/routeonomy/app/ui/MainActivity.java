@@ -26,20 +26,22 @@ import com.routeonomy.app.domain.BriefingPlanner;
 import com.routeonomy.app.domain.BriefingSegment;
 import com.routeonomy.app.domain.DriveSession;
 import com.routeonomy.app.domain.GeoPoint;
+import com.routeonomy.app.domain.Geofence;
+import com.routeonomy.app.domain.GeofenceGate;
 import com.routeonomy.app.domain.Place;
 import com.routeonomy.app.domain.QuizQuestion;
 import com.routeonomy.app.domain.QuizSession;
 import com.routeonomy.app.domain.Region;
 import com.routeonomy.app.domain.RegionPrediction;
 import com.routeonomy.app.domain.RegionPredictor;
-import com.routeonomy.app.domain.RegionRoutingKt;
 import com.routeonomy.app.domain.RegionTransition;
+import com.routeonomy.app.domain.RemainingTimeEstimator;
 import com.routeonomy.app.domain.TripContext;
 import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
 import com.routeonomy.app.pleos.NaviRouteProbe;
-import com.routeonomy.app.pleos.FusedLocationProbe;
+import com.routeonomy.app.pleos.FusedLocationSource;
 import com.routeonomy.app.pleos.NaviVoiceMonitor;
 import com.routeonomy.app.pleos.WindowAndFocusProbe;
 import com.routeonomy.app.simulation.FakeRouteInput;
@@ -63,8 +65,6 @@ public final class MainActivity extends Activity {
     private NaviRouteProbe naviProbe; // AVD experiment: real navi route/events
     private TextView naviProbeStatus;
     private WindowAndFocusProbe windowFocusProbe; // AVD experiment: adjacent navi window, audio focus
-    private FusedLocationProbe fusedProbe; // AVD experiment: Pleos FusedLocation + proximity alert
-    private Button fusedButton;
     private NaviVoiceMonitor naviVoiceMonitor; // AVD experiment: is navi voice guidance observable?
     private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
@@ -91,6 +91,13 @@ public final class MainActivity extends Activity {
     private TripContext trip;
     private FakeRouteInput fakeRoute;
     private GeoPoint currentLocation;
+    // Real position (Pleos FusedLocation) and region/arrival fences; the simulation buttons stay as a backup.
+    private FusedLocationSource locationSource;
+    private GeofenceGate geofenceGate;
+    private String locationSourceStatus = "위치: 시뮬레이션 입력";
+    private GeoPoint lastRealFix;
+    private String lastAlert;
+    private TextView locationStatus;
     private RegionPrediction prediction;
     private String regionSectionId;
     private String pendingAnnouncement;
@@ -119,9 +126,11 @@ public final class MainActivity extends Activity {
         trip = routes.demoTrip();
         fakeRoute = new FakeRouteInput(trip, routes.simulationStops());
         currentLocation = trip.getCurrent().getLocation();
-        List<String> startRegions = new ArrayList<>();
-        for (Region r : regions) if (RegionRoutingKt.contains(r, currentLocation)) startRegions.add(r.getId());
-        regionTransition.ignoreRegionsAtStart(startRegions);
+        List<Geofence> fences = new ArrayList<>();
+        for (Region r : regions) fences.add(Geofence.of(r));
+        fences.add(Geofence.arrival(trip.getDestination()));
+        geofenceGate = new GeofenceGate(fences);
+        geofenceGate.onLocation(currentLocation); // simulated start: fences it is outside of can be entered
         session.setEtaMinutes(trip.getRemainingMinutes());
         updatePrediction();
         replan();
@@ -178,9 +187,12 @@ public final class MainActivity extends Activity {
             return kotlin.Unit.INSTANCE;
         });
         naviVoiceMonitor.start();
-        Region pangyo = null;
-        for (Region r : regions) if (r.getId().equals("pangyo")) pangyo = r;
-        fusedProbe = new FusedLocationProbe(this, pangyo, message -> { naviProbe.note(message); return kotlin.Unit.INSTANCE; });
+        locationSource = new FusedLocationSource(this, fences, new FusedLocationSource.Listener() {
+            @Override public void onLocation(GeoPoint point) { runOnUiThread(() -> onRealLocation(point)); }
+            @Override public void onFenceTransition(String fenceId, boolean entered) { runOnUiThread(() -> onProximityAlert(fenceId, entered)); }
+            @Override public void onStatus(String message) { runOnUiThread(() -> { locationSourceStatus = message; render(); }); }
+        });
+        startLocation();
         windowFocusProbe = new WindowAndFocusProbe(this, message -> { naviProbe.note(message); return kotlin.Unit.INSTANCE; });
     }
 
@@ -199,6 +211,7 @@ public final class MainActivity extends Activity {
         mode=label(16,ink); root.addView(mode);
         eta=label(64,ink); eta.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(eta);
         routeStatus=label(18,ink); root.addView(routeStatus);
+        locationStatus=label(13,ink); root.addView(locationStatus);
         topic=label(30,ink); topic.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(topic);
         details=label(18,ink); root.addView(details);
         discoveries=label(16,ink); root.addView(discoveries);
@@ -228,7 +241,11 @@ public final class MainActivity extends Activity {
         demoMovePanel=new LinearLayout(this); demoMovePanel.setOrientation(LinearLayout.VERTICAL);
         List<Place> stops = fakeRoute.stops();
         if (!stops.isEmpty()) addMoveButton(stops.get(0));
-        enterButton=button("지역 진입"); enterButton.setOnClickListener(v->{Region target=entryTarget(); if(target!=null) onLocationChanged(fakeRoute.enterRegion(target));}); demoMovePanel.addView(enterButton,full());
+        enterButton=button("지역 진입"); enterButton.setOnClickListener(v->{
+            Region target=entryTarget(); if(target==null) return;
+            geofenceGate.onExit(target.getId()); // the jump starts outside the region, even if real tracking reset the gate
+            fakeRoute.enterRegion(target); applyLocation(fakeRoute.getLocation());
+        }); demoMovePanel.addView(enterButton,full());
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
@@ -245,7 +262,6 @@ public final class MainActivity extends Activity {
         Button probeAdjacent=button("[실험] 내비 옆 창으로 열기"); probeAdjacent.setOnClickListener(v->windowFocusProbe.openNaviAdjacent()); probeRow2.addView(probeAdjacent,weight());
         Button probeFocus=button("[실험] 오디오 포커스 요청/반납"); probeFocus.setOnClickListener(v->windowFocusProbe.toggleFocus()); probeRow2.addView(probeFocus,weight());
         simulationPanel.addView(probeRow2);
-        fusedButton=button("[실험] Pleos 위치 수신 시작"); fusedButton.setOnClickListener(v->toggleFusedProbe()); simulationPanel.addView(fusedButton,full());
         naviProbeStatus=label(13,ink); naviProbeStatus.setText("내비 실험 대기"); simulationPanel.addView(naviProbeStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
@@ -308,7 +324,7 @@ public final class MainActivity extends Activity {
         render();
     }
 
-    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->onLocationChanged(fakeRoute.moveTo(stop)));demoMovePanel.addView(b,full());}
+    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
     /** The demo can only enter the region the trip is predicted to pass; nothing once a region was entered. */
     private Region entryTarget(){
         if (regionTransition.enteredRegionId() != null || prediction == null) return null;
@@ -316,21 +332,50 @@ public final class MainActivity extends Activity {
     }
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
-    /** Simulated location update; a Pleos FusedLocation/ProximityAlert adapter would call the same path. */
-    private void onLocationChanged(int remainingMinutes) {
-        currentLocation = fakeRoute.getLocation();
-        fake.setEta(remainingMinutes);
-        Region entered = RegionPredictor.regionAt(currentLocation, regions);
-        if (entered != null && regionTransition.onRegionEntered(entered.getId()) && !playbackActive && !playbackPaused) {
-            // Nothing is playing (not started, waiting for the region, or finished): switch now.
-            regionTransition.consumePendingSwitch();
-            startRegionSection(entered.getId());
-            replan();
-            render();
-            if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
-            return;
+    private void onRealLocation(GeoPoint point) {
+        lastRealFix = point;
+        applyLocation(point);
+    }
+    /** Pleos proximity alert; the gate drops registration-time and duplicate events. */
+    private void onProximityAlert(String fenceId, boolean entered) {
+        lastAlert = fenceName(fenceId) + (entered ? " 진입" : " 이탈");
+        boolean accepted = entered ? geofenceGate.onEnter(fenceId) : geofenceGate.onExit(fenceId);
+        if (accepted && handleFence(fenceId, entered)) render();
+        else refreshRoute();
+    }
+    /** Position update from Pleos FusedLocation or the simulation buttons: same path for both. */
+    private void applyLocation(GeoPoint point) {
+        currentLocation = point;
+        fake.setEta(RemainingTimeEstimator.estimate(trip, point));
+        boolean handled = false;
+        for (GeofenceGate.Transition t : geofenceGate.onLocation(point)) handled |= handleFence(t.getId(), t.getEntered());
+        if (handled) render();
+        else refreshRoute();
+    }
+    /** Applies one accepted entry/exit. Returns true when it already replanned (region switch started now). */
+    private boolean handleFence(String fenceId, boolean entered) {
+        if (Geofence.DESTINATION_ID.equals(fenceId)) {
+            fake.markArrived(entered); // leaving the destination again clears arrival
+            return false;
         }
-        refreshRoute();
+        if (!entered || !regionTransition.onRegionEntered(fenceId)) return false;
+        if (playbackActive || playbackPaused) return false; // pending: switches after the current segment
+        // Nothing is playing (not started, waiting for the region, or finished): switch now.
+        regionTransition.consumePendingSwitch();
+        startRegionSection(fenceId);
+        replan();
+        render();
+        if (briefingStarted && ttsReady && !plan.getSegments().isEmpty()) speakCurrent();
+        return true;
+    }
+    private String fenceName(String fenceId) {
+        return Geofence.DESTINATION_ID.equals(fenceId) ? trip.getDestination().getName() : regionName(fenceId);
+    }
+    private String locationStatusText() {
+        StringBuilder text = new StringBuilder(locationSourceStatus);
+        if (lastRealFix != null) text.append(String.format(Locale.US, " · %.5f, %.5f", lastRealFix.getLatitude(), lastRealFix.getLongitude()));
+        if (lastAlert != null) text.append("\n최근 Pleos 근접 알림: ").append(lastAlert);
+        return text.toString();
     }
     /** Recomputes the prediction and queue after a position or remaining-time change. */
     private void refreshRoute() {
@@ -387,7 +432,10 @@ public final class MainActivity extends Activity {
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
         eta.setText("목적지까지 " + session.etaMinutes()+"분");
-        routeStatus.setText(routeStatusText()); topic.setText(current == null ? "브리핑 없음" : current.getTopic());
+        routeStatus.setText(routeStatusText());
+        locationStatus.setText(locationStatusText());
+        locationStatus.setVisibility(driving?View.GONE:View.VISIBLE);
+        topic.setText(current == null ? "브리핑 없음" : current.getTopic());
         details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
         discoveries.setText(discoveryText());
@@ -583,24 +631,24 @@ public final class MainActivity extends Activity {
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }
-    private static final String FUSED_PERMISSION = "pleos.car.permission.FUSED_LOCATION";
     private static final int FUSED_PERMISSION_REQUEST = 41;
-    private void toggleFusedProbe(){
-        if (fusedProbe.isRunning()) { fusedProbe.stop(); fusedButton.setText("[실험] Pleos 위치 수신 시작"); return; }
-        if (checkSelfPermission(FUSED_PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            naviProbe.note("위치 권한 요청 중");
-            requestPermissions(new String[]{FUSED_PERMISSION}, FUSED_PERMISSION_REQUEST);
+    private void startLocation(){
+        if (checkSelfPermission(FusedLocationSource.PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            locationSourceStatus = "위치: Pleos 위치 권한 요청 중";
+            requestPermissions(new String[]{FusedLocationSource.PERMISSION}, FUSED_PERMISSION_REQUEST);
             return;
         }
-        fusedProbe.start();
-        if (fusedProbe.isRunning()) fusedButton.setText("[실험] Pleos 위치 수신 중지");
+        // Real tracking replaces the simulated start: entries count only after a fix outside the fence.
+        geofenceGate.reset();
+        locationSource.start();
     }
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         if (requestCode != FUSED_PERMISSION_REQUEST) return;
         boolean granted = results.length > 0 && results[0] == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        naviProbe.note("위치 권한 " + (granted ? "허용됨" : "거부됨"));
-        if (granted) toggleFusedProbe();
+        if (granted) startLocation();
+        else locationSourceStatus = "위치: 권한 거부 · 시뮬레이션 입력으로 진행";
+        render();
     }
     /** Window resized/moved (Pleos window bar): the activity is kept; log the new window for the experiment. */
     @Override public void onConfigurationChanged(android.content.res.Configuration config) {
@@ -611,5 +659,5 @@ public final class MainActivity extends Activity {
         super.onMultiWindowModeChanged(inMultiWindow, config);
         if (naviProbe != null) naviProbe.note("멀티윈도우 모드 변경: " + inMultiWindow);
     }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(fusedProbe!=null)fusedProbe.stop();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();if(windowFocusProbe!=null)windowFocusProbe.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
 }

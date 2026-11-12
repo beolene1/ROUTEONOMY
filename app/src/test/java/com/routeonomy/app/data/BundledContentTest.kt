@@ -1,6 +1,7 @@
 package com.routeonomy.app.data
 
 import com.routeonomy.app.domain.BriefingSegment
+import com.routeonomy.app.domain.Geofence
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -27,6 +28,9 @@ class BundledContentTest {
         assertTrue(trip.remainingMinutes > 0)
         val stops = RouteJsonParser.simulationStops(asset("demo_trip.json"))
         assertEquals(listOf("판교 진입 직전", "기흥역 근처"), stops.map { it.name })
+        // The last stop doubles as the simulated arrival, so it must sit inside the arrival radius.
+        assertTrue(Geofence.arrival(trip.destination).contains(stops.last().location))
+        assertTrue(!Geofence.arrival(trip.destination).contains(stops.first().location))
     }
 
     @Test fun segmentsAreUniqueAndTimed() {

@@ -17,7 +17,7 @@ class FakeRouteInputTest {
         40,
     )
     private val beforePangyo = Place("판교 진입 직전", GeoPoint(37.41632, 127.09543))
-    private val nearGiheung = Place("기흥역 근처", GeoPoint(37.28015, 127.11568))
+    private val nearGiheung = Place("기흥역 근처", GeoPoint(37.27746, 127.11584))
     private val pangyo = Region("pangyo", "판교", GeoPoint(37.40159, 127.10842), 1650.0)
 
     @Test fun startsAtOriginWithFullTime() {

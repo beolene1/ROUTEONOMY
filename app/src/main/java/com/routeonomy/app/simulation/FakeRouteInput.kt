@@ -4,12 +4,11 @@ import com.routeonomy.app.domain.GeoMath
 import com.routeonomy.app.domain.GeoPoint
 import com.routeonomy.app.domain.Place
 import com.routeonomy.app.domain.Region
+import com.routeonomy.app.domain.RemainingTimeEstimator
 import com.routeonomy.app.domain.TripContext
-import kotlin.math.roundToInt
 
 /**
- * Demo-only vehicle position. Jumps between fixed stops and estimates the remaining minutes in proportion
- * to the straight-line distance left, standing in for FusedLocation and NaviHelper remainTime.
+ * Demo-only vehicle position: jumps between fixed stops. Backup for when Pleos FusedLocation is not received.
  */
 class FakeRouteInput(private val trip: TripContext, private val stops: List<Place>) {
     var location: GeoPoint = trip.current.location
@@ -37,10 +36,5 @@ class FakeRouteInput(private val trip: TripContext, private val stops: List<Plac
         return remainingMinutes()
     }
 
-    fun remainingMinutes(): Int {
-        val total = GeoMath.distanceMeters(trip.current.location, trip.destination.location)
-        if (total <= 0.0) return 1
-        val left = GeoMath.distanceMeters(location, trip.destination.location)
-        return (trip.remainingMinutes * left / total).roundToInt().coerceAtLeast(1)
-    }
+    fun remainingMinutes(): Int = RemainingTimeEstimator.estimate(trip, location)
 }
