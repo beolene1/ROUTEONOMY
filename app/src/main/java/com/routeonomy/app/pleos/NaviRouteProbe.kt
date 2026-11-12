@@ -11,6 +11,7 @@ import ai.pleos.playground.navi.constants.NavigationStatus
 import ai.pleos.playground.navi.data.RouteInfo
 import ai.pleos.playground.navi.data.RouteStartInfo
 import ai.pleos.playground.navi.data.RouteStateInfo
+import ai.pleos.playground.navi.data.TBTInfo
 import ai.pleos.playground.navi.data.TripInfo
 import ai.pleos.playground.navi.helper.NaviHelper
 import ai.pleos.playground.navi.helper.listener.NaviHelperEventListener
@@ -51,8 +52,14 @@ class NaviRouteProbe(context: Context, private val onLog: (String) -> Unit) {
         override fun onNavigationStatus(status: NavigationStatus) = log("내비 상태: $status")
         override fun onDrivingInfo(drivingInfo: DrivingInfo) = log("주행 정보: $drivingInfo")
         override fun onTripInfo(tripInfo: TripInfo) = log("trip: eta=${tripInfo.eta}, distance=${tripInfo.distance}")
+        override fun onTBTInfo(tbtInfoList: List<TBTInfo>) {
+            // Pushed often during guidance: log only when the next turn changes.
+            val next = tbtInfoList.firstOrNull()?.let { "${it.type} · ${it.description}" } ?: "없음"
+            if (next != lastTbt) { lastTbt = next; log("다음 안내(TBT ${tbtInfoList.size}개): $next") }
+        }
         override fun onError(errorCode: NaviErrorCode) = log("오류: $errorCode")
     }
+    private var lastTbt: String? = null
 
     /** Asks the navi to start a route to the given place (permission NAVI_ROUTE_SEARCH). */
     fun requestRoute(latitude: Double, longitude: Double, name: String) = whenConnected {
@@ -66,6 +73,8 @@ class NaviRouteProbe(context: Context, private val onLog: (String) -> Unit) {
         helper.getRouteStateInfo()
         helper.getDestinationInfo()
         helper.getCurrentLocationInfo()
+        lastTbt = null
+        helper.getTBTInfo()
     }
 
     fun cancelRoute() = whenConnected {
@@ -112,6 +121,9 @@ class NaviRouteProbe(context: Context, private val onLog: (String) -> Unit) {
             log("호출 예외: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
+
+    /** Lets other experiment sources (e.g. the audio monitor) share the on-screen log. */
+    fun note(message: String) = log(message)
 
     private fun log(message: String) {
         Log.i(TAG, message)

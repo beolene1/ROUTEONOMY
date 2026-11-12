@@ -36,6 +36,7 @@ import com.routeonomy.app.domain.TodayDiscoveries;
 import com.routeonomy.app.pleos.GearMonitor;
 import com.routeonomy.app.pleos.NaviEtaClient;
 import com.routeonomy.app.pleos.NaviRouteProbe;
+import com.routeonomy.app.pleos.NaviVoiceMonitor;
 import com.routeonomy.app.simulation.FakeRouteInput;
 import com.routeonomy.app.simulation.FakeVehicleInput;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ public final class MainActivity extends Activity {
     private NaviEtaClient naviEtaClient;
     private NaviRouteProbe naviProbe; // AVD experiment: real navi route/events
     private TextView naviProbeStatus;
+    private NaviVoiceMonitor naviVoiceMonitor; // AVD experiment: is navi voice guidance observable?
     private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
     private Button quizButton;
     private LinearLayout simulationPanel, playbackControls;
@@ -154,6 +156,11 @@ public final class MainActivity extends Activity {
             message -> { runOnUiThread(() -> sdkStatus.setText(message)); return kotlin.Unit.INSTANCE; });
         naviEtaClient.start();
         naviProbe = new NaviRouteProbe(this, text -> { runOnUiThread(() -> naviProbeStatus.setText(text)); return kotlin.Unit.INSTANCE; });
+        naviVoiceMonitor = new NaviVoiceMonitor(this, (naviSpeaking, usages) -> {
+            naviProbe.note((naviSpeaking ? "♪ 내비 음성 재생 중" : "오디오") + " · 재생 중인 소리: " + usages);
+            return kotlin.Unit.INSTANCE;
+        });
+        naviVoiceMonitor.start();
     }
 
     private void buildUi() {
@@ -468,5 +475,5 @@ public final class MainActivity extends Activity {
         if (chunkIndex + 1 < currentChunks.size()) { chunkIndex++; speakCurrentChunk(); }
         else advanceBriefing(true);
     }
-    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(tts!=null){tts.stop();tts.release();}if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(naviVoiceMonitor!=null)naviVoiceMonitor.close();if(naviProbe!=null)naviProbe.close();super.onDestroy();}
 }
