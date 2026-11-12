@@ -2,7 +2,6 @@ package com.routeonomy.app.ui;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
 import android.view.View;
@@ -14,30 +13,37 @@ import android.widget.TextView;
 import com.routeonomy.app.R;
 import com.routeonomy.app.domain.BriefingSegment;
 
-import java.time.LocalDate;
 
 final class PreDriveDashboard extends LinearLayout {
-    private static final int BACKGROUND = 0xfff4f5ef;
-    private static final int INK = 0xff151815;
-    private static final int MUTED = 0xff5f665e;
-    private static final int NEUTRAL = 0xffe7e7e0;
-    private static final int GREEN = 0xff256a49;
-    private static final int MINT = 0xffd7ebe0;
+    private static final int BACKGROUND = UiStyle.BACKGROUND;
+    private static final int INK = UiStyle.INK;
+    private static final int MUTED = UiStyle.MUTED;
+    private static final int NEUTRAL = UiStyle.NEUTRAL;
+    private static final int GREEN = UiStyle.GREEN;
+    private static final int MINT = UiStyle.MINT;
 
-    private final float scale;
+    private final UiStyle style;
     private final boolean narrow;
     private final TextView topic;
     private final TextView description;
     private final TextView status;
     private final TextView startButton;
     private final TextView changeButton;
+    private final LinearLayout learning;
+    private final LinearLayout dots;
+    private final Runnable onNext;
+    private final Runnable onPrevious;
+    private boolean canChangeTopic;
+    private int dotsPosition = -1, dotsCount = -1;
 
     /** @param windowWidth width in dp of the column the dashboard is shown in (not the whole window). */
-    PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onChange,
+    PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onNext, Runnable onPrevious,
             Runnable onSettings, Runnable onFeatures) {
         super(context);
+        this.onNext = onNext;
+        this.onPrevious = onPrevious;
         narrow = windowWidth > 0 && windowWidth < 640;
-        scale = windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f;
+        style = new UiStyle(context, windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f);
         setOrientation(VERTICAL);
         setBackgroundColor(BACKGROUND);
         setPadding(size(narrow ? 24 : 49), size(40), size(narrow ? 24 : 49), size(48));
@@ -48,7 +54,7 @@ final class PreDriveDashboard extends LinearLayout {
         addMarketRows();
         addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"), rowParams(28));
 
-        LinearLayout learning = row();
+        learning = row();
         styleCard(learning);
         learning.setPadding(size(15), size(11), size(15), size(11));
         FrameLayout thumbnail = new FrameLayout(context);
@@ -69,9 +75,14 @@ final class PreDriveDashboard extends LinearLayout {
         copyParams.setMarginStart(size(14));
         learning.addView(copy, copyParams);
         addView(learning, rowParams(10));
+        enableSwipe(learning);
+        dots = row();
+        dots.setGravity(Gravity.CENTER);
+        dots.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        addView(dots, rowParams(10));
 
         LinearLayout actions = row();
-        changeButton = action("Change topic", MUTED, NEUTRAL, onChange);
+        changeButton = action("Change topic", MUTED, NEUTRAL, () -> slide(1));
         startButton = action("Start today’s learning", Color.WHITE, GREEN, onStart);
         actions.addView(changeButton, new LayoutParams(0, size(49), 1f));
         LayoutParams startParams = new LayoutParams(0, size(49), 2f);
@@ -87,7 +98,10 @@ final class PreDriveDashboard extends LinearLayout {
         addView(status, rowParams(8));
     }
 
-    void bindTopic(BriefingSegment segment, boolean canChangeTopic) {
+    /** @param position index of the shown topic among [count] swipeable topics (dots); count 0 hides them. */
+    void bindTopic(BriefingSegment segment, boolean canChangeTopic, int position, int count) {
+        this.canChangeTopic = canChangeTopic;
+        bindDots(position, count);
         topic.setText(segment == null ? "브리핑 없음" : segment.getTopic());
         description.setText(segment == null ? "" : "★  " + segment.getTerm().getName()
                 + " · " + segment.getTerm().getExplanation());
@@ -98,41 +112,76 @@ final class PreDriveDashboard extends LinearLayout {
         changeButton.setAlpha(canChangeTopic ? 1f : 0.55f);
     }
 
+    private void bindDots(int position, int count) {
+        if (position == dotsPosition && count == dotsCount) return; // render() runs on every location fix
+        dotsPosition = position;
+        dotsCount = count;
+        dots.removeAllViews();
+        dots.setVisibility(count > 1 ? VISIBLE : GONE);
+        for (int i = 0; i < count && count > 1; i++) {
+            View dot = new View(getContext());
+            boolean on = i == position;
+            dot.setBackground(shape(on ? GREEN : NEUTRAL, 4));
+            LayoutParams params = new LayoutParams(size(on ? 22 : 8), size(8));
+            if (i > 0) params.setMarginStart(size(6));
+            dots.addView(dot, params);
+        }
+    }
+
+    /** Banner-style change: the card slides out, the topic changes, the new card slides in. */
+    private void slide(int direction) {
+        if (!canChangeTopic) return;
+        float distance = learning.getWidth() > 0 ? learning.getWidth() : size(400);
+        learning.animate().cancel();
+        learning.animate().translationX(-direction * distance).alpha(0f).setDuration(160).withEndAction(() -> {
+            (direction > 0 ? onNext : onPrevious).run();
+            learning.setTranslationX(direction * distance);
+            learning.animate().translationX(0f).alpha(1f).setDuration(160).start();
+        }).start();
+    }
+
+    /** Horizontal drag on the topic card: past a threshold it changes topic, otherwise it snaps back. */
+    private void enableSwipe(View card) {
+        final int slop = android.view.ViewConfiguration.get(getContext()).getScaledTouchSlop();
+        final float[] start = new float[2];
+        final boolean[] dragging = new boolean[1];
+        card.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case android.view.MotionEvent.ACTION_DOWN:
+                    start[0] = event.getRawX();
+                    start[1] = event.getRawY();
+                    dragging[0] = false;
+                    return true;
+                case android.view.MotionEvent.ACTION_MOVE: {
+                    float dx = event.getRawX() - start[0], dy = event.getRawY() - start[1];
+                    if (!dragging[0] && canChangeTopic && Math.abs(dx) > slop && Math.abs(dx) > Math.abs(dy)) {
+                        dragging[0] = true;
+                        view.getParent().requestDisallowInterceptTouchEvent(true); // keep the vertical scroll out
+                    }
+                    if (dragging[0]) view.setTranslationX(dx * 0.6f);
+                    return true;
+                }
+                case android.view.MotionEvent.ACTION_UP:
+                case android.view.MotionEvent.ACTION_CANCEL: {
+                    float dx = event.getRawX() - start[0];
+                    if (dragging[0] && Math.abs(dx) > size(80)) slide(dx < 0 ? 1 : -1);
+                    else view.animate().translationX(0f).setDuration(120).start();
+                    dragging[0] = false;
+                    return true;
+                }
+                default:
+                    return false;
+            }
+        });
+    }
+
     void showStatus(CharSequence message) {
         status.setText(message);
         status.setVisibility(message.length() == 0 ? GONE : VISIBLE);
     }
 
     private LinearLayout header() {
-        LinearLayout header = row();
-        View logo = new View(getContext());
-        logo.setBackground(shape(0xff6c9181, 5));
-        header.addView(logo, new LayoutParams(size(34), size(34)));
-        TextView brand = text("ROUTEONOMY", 20, MUTED, false);
-        LayoutParams brandParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-        brandParams.setMarginStart(size(12));
-        header.addView(brand, brandParams);
-        header.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
-
-        LinearLayout morning = row();
-        morning.setBackground(shape(NEUTRAL, 17));
-        morning.setPadding(size(10), 0, size(10), 0);
-        morning.addView(picture(R.drawable.pre_drive_morning), new LayoutParams(size(26), size(26)));
-        TextView morningLabel = text(narrow ? "Morning" : "Morning mode", 20, MUTED, false);
-        morning.addView(morningLabel);
-        header.addView(morning, new LayoutParams(LayoutParams.WRAP_CONTENT, size(34)));
-        header.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
-
-        if (!narrow) {
-            header.addView(pill(LocalDate.now().toString(), MUTED, NEUTRAL, 20));
-        }
-        FrameLayout profile = new FrameLayout(getContext());
-        profile.setBackground(shape(NEUTRAL, 17));
-        place(profile, picture(R.drawable.pre_drive_profile), 13, 13, Gravity.CENTER);
-        LayoutParams profileParams = new LayoutParams(size(34), size(34));
-        profileParams.setMarginStart(size(16));
-        header.addView(profile, profileParams);
-        return header;
+        return style.appHeader(narrow);
     }
 
     private LinearLayout greeting() {
@@ -228,19 +277,7 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private void configureAction(View view, Runnable click) {
-        android.util.TypedValue value = new android.util.TypedValue();
-        if (getContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, value, true)) {
-            view.setForeground(getContext().getDrawable(value.resourceId));
-        }
-        view.setFocusable(true);
-        view.setOnClickListener(v -> click.run());
-        view.setAccessibilityDelegate(new View.AccessibilityDelegate() {
-            @Override public void onInitializeAccessibilityNodeInfo(
-                    View host, android.view.accessibility.AccessibilityNodeInfo info) {
-                super.onInitializeAccessibilityNodeInfo(host, info);
-                info.setClassName(android.widget.Button.class.getName());
-            }
-        });
+        style.clickable(view, click);
     }
 
     private View gridIcon() {
@@ -261,15 +298,11 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private TextView pill(String label, int color, int fill, int textSize) {
-        TextView pill = text(label, textSize, color, false);
-        pill.setPadding(size(10), size(4), size(10), size(4));
-        pill.setBackground(shape(fill, 17));
-        return pill;
+        return style.pill(label, color, fill, textSize);
     }
 
     private void styleCard(View card) {
-        card.setBackground(shape(Color.WHITE, 14));
-        card.setElevation(size(3));
+        style.card(card);
     }
 
     private ImageView picture(int resource) {
@@ -285,13 +318,7 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private TextView text(String value, int size, int color, boolean bold) {
-        TextView text = new TextView(getContext());
-        text.setText(value);
-        text.setTextSize(Math.max(11, size * scale));
-        text.setTextColor(color);
-        text.setIncludeFontPadding(false);
-        text.setTypeface(Typeface.create("sans-serif", bold ? Typeface.BOLD : Typeface.NORMAL));
-        return text;
+        return style.text(value, size, color, bold);
     }
 
     private LinearLayout row() {
@@ -314,13 +341,10 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private GradientDrawable shape(int color, int radius) {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(color);
-        drawable.setCornerRadius(size(radius));
-        return drawable;
+        return style.shape(color, radius);
     }
 
     private int size(float dp) {
-        return Math.round(dp * scale * getResources().getDisplayMetrics().density);
+        return style.size(dp);
     }
 }

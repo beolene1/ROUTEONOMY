@@ -1,7 +1,7 @@
 <resources>
-    <color name="routeonomy_background">#F7F5F2</color>
-    <color name="routeonomy_text">#262D35</color>
-    <color name="routeonomy_accent">#DC9EAC</color>
-    <color name="routeonomy_muted">#A9B4BD</color>
-    <color name="routeonomy_card">#FFFFFF</color>
+    <!-- Same palette as ui/UiStyle (Figma screens). -->
+    <color name="routeonomy_background">#F4F5EF</color>
+    <color name="routeonomy_text">#151815</color>
+    <color name="routeonomy_accent">#256A49</color>
+    <color name="routeonomy_muted">#5F665E</color>
 </resources>
