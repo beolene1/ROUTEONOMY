@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.graphics.Typeface;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -108,9 +107,8 @@ public final class MainActivity extends Activity {
     private QuizSession quiz;
     private boolean quizEmptyNotice;
     private String renderedQuizKey;
-    private LinearLayout quizPanel, quizChoices;
-    private TextView quizQuestionText, quizFeedback;
-    private Button quizNextButton;
+    private QuizScreen quizScreen;
+    private ScrollView quizScroll;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -231,18 +229,20 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizPanel=new LinearLayout(this); quizPanel.setOrientation(LinearLayout.VERTICAL);
-        quizQuestionText=label(22,ink); quizQuestionText.setTypeface(Typeface.DEFAULT,Typeface.BOLD); quizPanel.addView(quizQuestionText);
-        quizChoices=new LinearLayout(this); quizChoices.setOrientation(LinearLayout.VERTICAL); quizPanel.addView(quizChoices);
-        quizFeedback=label(18,ink); quizPanel.addView(quizFeedback);
-        quizNextButton=button("다음 문제"); quizNextButton.setOnClickListener(v->onQuizNext()); quizPanel.addView(quizNextButton,full());
-        quizPanel.setVisibility(View.GONE); root.addView(quizPanel);
+        quizScreen = new QuizScreen(this, this::closeQuiz, this::onQuizAnswer, this::onQuizNext);
+        quizScreen.setPadding(style.size(28), style.size(24), style.size(28), style.size(24));
+        quizScroll = new ScrollView(this);
+        quizScroll.setFillViewport(true);
+        quizScroll.setBackgroundColor(UiStyle.BACKGROUND);
+        quizScroll.addView(quizScreen);
+        quizScroll.setVisibility(View.GONE);
         dashboardScroll = new ScrollView(this);
         dashboardScroll.setFillViewport(true);
 
         appArea = new FrameLayout(this);
         appArea.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
+        appArea.addView(quizScroll, new FrameLayout.LayoutParams(-1, -1));
         routeMap = new RouteMapView(this);
         routeMap.setRoute(routePoints, trip.getCurrent(), trip.getDestination(), regions);
         screen = new LinearLayout(this);
@@ -446,6 +446,7 @@ public final class MainActivity extends Activity {
         boolean preDrive = !driving && !briefingStarted && !session.canStartQuiz();
         boolean showDashboard = preDrive && !toolsOpen;
         dashboardScroll.setVisibility(showDashboard ? View.VISIBLE : View.GONE);
+        // Quiz state is settled further down (it may be dropped); the screens are switched in renderQuiz().
         briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
         nowPlaying.setDriving(driving, preDrive);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
@@ -494,15 +495,12 @@ public final class MainActivity extends Activity {
         }
         quiz = next;
         quizEmptyNotice = false;
-        quizStatus.setText("오늘 들은 브리핑 퀴즈 · " + quiz.total() + "문제");
         render();
-        // Scroll once the panel has been laid out, so the target offset is current.
-        briefingScroll.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
-            @Override public void onGlobalLayout() {
-                briefingScroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                briefingScroll.smoothScrollTo(0, quizStatus.getTop());
-            }
-        });
+        quizScroll.scrollTo(0, 0);
+    }
+    private void closeQuiz(){
+        quiz = null;
+        render();
     }
     private void onQuizAnswer(int choice){
         if (quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
@@ -516,44 +514,21 @@ public final class MainActivity extends Activity {
         renderQuiz();
     }
     private void renderQuiz(){
-        quizPanel.setVisibility(quiz == null ? View.GONE : View.VISIBLE);
-        // render() runs on many unrelated events; rebuild the choices only when the quiz state changed.
+        boolean showQuiz = quiz != null;
+        quizScroll.setVisibility(showQuiz ? View.VISIBLE : View.GONE);
+        if (showQuiz) briefingScroll.setVisibility(View.GONE);
+        // render() runs on many unrelated events; rebind only when the quiz state changed.
         String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice();
         if (java.util.Objects.equals(key, renderedQuizKey)) return;
         renderedQuizKey = key;
-        quizChoices.removeAllViews();
-        if (quiz == null) return;
-        if (quiz.isFinished()) {
-            quizQuestionText.setText("퀴즈 결과 · " + quiz.total() + "문제 중 " + quiz.score() + "개 정답");
-            quizFeedback.setText(quiz.score() == quiz.total() ? "모두 맞혔어요! 오늘 브리핑을 잘 기억하고 계시네요." : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.");
-            quizNextButton.setText("다시 풀기");
-            quizNextButton.setVisibility(View.VISIBLE);
-            return;
-        }
+        if (quiz != null) quizScreen.bind(quiz, quizCategory());
+    }
+    /** Topic of the briefing the current question came from, shown as the quiz category pill. */
+    private String quizCategory(){
         QuizQuestion question = quiz.current();
-        quizQuestionText.setText("문제 " + (quiz.position() + 1) + "/" + quiz.total() + "\n" + question.getQuestion());
-        Integer selected = quiz.selectedChoice();
-        List<String> choices = question.getChoices();
-        for (int i = 0; i < choices.size(); i++) {
-            final int choice = i;
-            String mark = "";
-            if (selected != null && i == question.getAnswerIndex()) mark = "✓ ";
-            else if (selected != null && i == selected) mark = "✗ ";
-            Button b = button(mark + (i + 1) + ". " + choices.get(i));
-            b.setAllCaps(false);
-            b.setEnabled(selected == null);
-            b.setOnClickListener(v -> onQuizAnswer(choice));
-            quizChoices.addView(b, full());
-        }
-        if (selected == null) {
-            quizFeedback.setText("");
-            quizNextButton.setVisibility(View.GONE);
-        } else {
-            boolean correct = selected == question.getAnswerIndex();
-            quizFeedback.setText((correct ? "정답입니다!" : "아쉬워요. 정답은 " + (question.getAnswerIndex() + 1) + "번입니다.") + "\n" + question.getExplanation());
-            quizNextButton.setText(quiz.position() + 1 < quiz.total() ? "다음 문제" : "결과 보기");
-            quizNextButton.setVisibility(View.VISIBLE);
-        }
+        if (question == null) return "오늘의 브리핑";
+        for (BriefingSegment s : segments) if (s.getId().equals(question.getSegmentId())) return s.getTopic();
+        return "오늘의 브리핑";
     }
     private String discoveryText(){
         List<BriefingSegment> heard = TodayDiscoveries.from(segments, completedSegmentIds);
