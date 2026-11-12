@@ -93,6 +93,7 @@ public final class MainActivity extends Activity {
     private List<QuizQuestion> quizQuestions;
     private QuizSession quiz;
     private boolean quizEmptyNotice;
+    private String renderedQuizKey;
     private LinearLayout quizPanel, quizChoices;
     private TextView quizQuestionText, quizFeedback;
     private Button quizNextButton;
@@ -388,7 +389,13 @@ public final class MainActivity extends Activity {
         quizEmptyNotice = false;
         quizStatus.setText("오늘 들은 브리핑 퀴즈 · " + quiz.total() + "문제");
         render();
-        briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, quizStatus.getTop()));
+        // Scroll once the panel has been laid out, so the target offset is current.
+        briefingScroll.getViewTreeObserver().addOnGlobalLayoutListener(new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override public void onGlobalLayout() {
+                briefingScroll.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                briefingScroll.smoothScrollTo(0, quizStatus.getTop());
+            }
+        });
     }
     private void onQuizAnswer(int choice){
         if (quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
@@ -403,6 +410,10 @@ public final class MainActivity extends Activity {
     }
     private void renderQuiz(){
         quizPanel.setVisibility(quiz == null ? View.GONE : View.VISIBLE);
+        // render() runs on many unrelated events; rebuild the choices only when the quiz state changed.
+        String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice();
+        if (java.util.Objects.equals(key, renderedQuizKey)) return;
+        renderedQuizKey = key;
         quizChoices.removeAllViews();
         if (quiz == null) return;
         if (quiz.isFinished()) {
@@ -472,7 +483,7 @@ public final class MainActivity extends Activity {
         if(plan==null||plan.getSegments().isEmpty())return;
         if(tts!=null) tts.stop();
         BriefingSegment previous=plan.getSegments().get(0);
-        if (completed) completedSegmentIds.add(previous.getId());
+        if (completed) { completedSegmentIds.add(previous.getId()); quizEmptyNotice = false; }
         playedSegmentIds.add(previous.getId());
         playbackActive=false; playbackPaused=false; currentSegmentId=null;
         String switchTo = regionTransition.consumePendingSwitch();
