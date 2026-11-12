@@ -16,7 +16,6 @@ import ai.pleos.playground.tts.constant.Mode;
 import ai.pleos.playground.tts.listener.EventListener;
 import ai.pleos.playground.tts.listener.OnInitializeListener;
 import java.util.Locale;
-import com.routeonomy.app.R;
 import com.routeonomy.app.data.AssetQuizRepository;
 import com.routeonomy.app.data.AssetRouteRepository;
 import com.routeonomy.app.data.AssetSegmentRepository;
@@ -105,6 +104,7 @@ public final class MainActivity extends Activity {
     // Arrival quiz: null until started; dropped whenever P+ARRIVED no longer holds.
     private List<QuizQuestion> quizQuestions;
     private QuizSession quiz;
+    private boolean quizHidden; // closed with X: kept so it can be resumed
     private boolean quizEmptyNotice;
     private String renderedQuizKey;
     private QuizScreen quizScreen;
@@ -437,7 +437,7 @@ public final class MainActivity extends Activity {
         return dest + "\n경유 예상 지역 없음";
     }
     private void addGearButton(LinearLayout row,String title,DriveSession.Gear gear){Button b=button(title);b.setOnClickListener(v->{fake.setGear(gear);render();});row.addView(b,weight());}
-    private TextView label(int size,int color){TextView v=new TextView(this);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,16,0,16);return v;}
+    private TextView label(int size,int color){TextView v=new TextView(this);v.setTextSize(size);v.setTextColor(color);int pad=Math.round(8*getResources().getDisplayMetrics().density);v.setPadding(0,pad,0,pad);return v;}
     private Button button(String title){Button b=new Button(this);b.setText(title);return b;}
     private LinearLayout.LayoutParams full(){return new LinearLayout.LayoutParams(-1,-2);}
     private LinearLayout.LayoutParams weight(){return new LinearLayout.LayoutParams(0,-2,1);}
@@ -475,10 +475,11 @@ public final class MainActivity extends Activity {
         enterButton.setEnabled(target != null);
         boolean quizAllowed = session.canStartQuiz();
         if (!quizAllowed) { quiz = null; quizEmptyNotice = false; } // left P or arrival was cleared: stop the quiz
-        quizButton.setVisibility(driving || quiz != null ? View.GONE : View.VISIBLE);
+        quizButton.setVisibility(driving || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
+        quizButton.setText(quiz != null && quizHidden && !quiz.isFinished() ? "퀴즈 이어 풀기" : "도착 후 퀴즈 시작");
         quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
         quizButton.setEnabled(quizAllowed);
-        if (quiz == null) quizStatus.setText(!quizAllowed ? "P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다."
+        if (quiz == null || quizHidden) quizStatus.setText(!quizAllowed ? "P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다."
                 : quizEmptyNotice ? "아직 끝까지 들은 브리핑이 없어 풀 수 있는 퀴즈가 없습니다." : "목적지 도착 확인 · 정차 중 퀴즈 가능");
         renderQuiz();
         if (!playbackPaused && !playbackActive && !waitingForRegion && playbackStatus != null && !playbackStatus.getText().toString().startsWith("재생 완료") && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
@@ -486,6 +487,7 @@ public final class MainActivity extends Activity {
     }
     private void startQuiz(){
         if (!session.canStartQuiz()) return;
+        if (quiz != null && quizHidden && !quiz.isFinished()) { quizHidden = false; render(); return; } // resume
         QuizSession next = QuizSession.fromCompleted(quizQuestions, completedSegmentIds);
         if (next.isEmpty()) {
             quiz = null;
@@ -494,12 +496,13 @@ public final class MainActivity extends Activity {
             return;
         }
         quiz = next;
+        quizHidden = false;
         quizEmptyNotice = false;
         render();
         quizScroll.scrollTo(0, 0);
     }
     private void closeQuiz(){
-        quiz = null;
+        quizHidden = true;
         render();
     }
     private void onQuizAnswer(int choice){
@@ -514,7 +517,7 @@ public final class MainActivity extends Activity {
         renderQuiz();
     }
     private void renderQuiz(){
-        boolean showQuiz = quiz != null;
+        boolean showQuiz = quiz != null && !quizHidden;
         quizScroll.setVisibility(showQuiz ? View.VISIBLE : View.GONE);
         if (showQuiz) briefingScroll.setVisibility(View.GONE);
         // render() runs on many unrelated events; rebind only when the quiz state changed.

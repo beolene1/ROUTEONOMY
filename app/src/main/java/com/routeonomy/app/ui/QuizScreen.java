@@ -52,10 +52,14 @@ final class QuizScreen extends LinearLayout {
         category = style.pill("", UiStyle.GREEN, UiStyle.MINT, 15);
         category.setSingleLine(true);
         category.setEllipsize(TextUtils.TruncateAt.END);
+        // Compact pill centred in the space between logo and close button.
+        android.widget.FrameLayout categorySlot = new android.widget.FrameLayout(context);
+        categorySlot.addView(category, new android.widget.FrameLayout.LayoutParams(
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         LayoutParams categoryParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         categoryParams.setMarginStart(style.size(16));
         categoryParams.setMarginEnd(style.size(16));
-        header.addView(category, categoryParams);
+        header.addView(categorySlot, categoryParams);
         TextView close = style.text("✕", 22, UiStyle.INK, false);
         close.setGravity(Gravity.CENTER);
         close.setBackground(style.shape(Color.WHITE, 24));

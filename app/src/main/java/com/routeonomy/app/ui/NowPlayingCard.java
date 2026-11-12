@@ -119,7 +119,8 @@ final class NowPlayingCard extends LinearLayout {
         subtitle.setVisibility(segment == null ? GONE : VISIBLE);
         routeLine.setText(route);
         remaining.setText("목적지까지\n" + etaMinutes + "분");
-        float done = sentences > 0 ? Math.min(1f, (float) sentence / sentences) : 0f;
+        // The sentence being spoken counts as reached, so the bar matches the "n / m" label.
+        float done = sentences > 0 ? Math.min(1f, (float) (sentence + 1) / sentences) : 0f;
         ((LayoutParams) progressFill.getLayoutParams()).weight = done;
         ((LayoutParams) progressRest.getLayoutParams()).weight = 1f - done;
         progressFill.requestLayout();
