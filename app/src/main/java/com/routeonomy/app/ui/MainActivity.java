@@ -305,7 +305,11 @@ public final class MainActivity extends Activity {
     private String routeStatusText() {
         String dest = "→ " + trip.getDestination().getName();
         if (regionTransition.hasPendingSwitch()) return dest + "\n" + regionName(regionTransition.enteredRegionId()) + " 진입 · 지금 이야기가 끝나면 지역 브리핑으로 넘어가요";
-        if (regionSectionId != null) return dest + "\n" + regionName(regionSectionId) + " 구간 · 지역 브리핑";
+        if (regionSectionId != null) {
+            Region here = RegionPredictor.regionAt(currentLocation, regions);
+            boolean inside = here != null && here.getId().equals(regionSectionId);
+            return dest + "\n" + regionName(regionSectionId) + (inside ? " 구간 · 지역 브리핑" : " 구간 통과");
+        }
         if (prediction != null) {
             String name = prediction.getRegion().getName();
             if (waitingForRegion) return dest + "\n" + name + " 진입 대기 · 들어서면 지역 이야기를 이어서 들려드려요";
