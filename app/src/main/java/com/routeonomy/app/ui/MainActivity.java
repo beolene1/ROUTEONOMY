@@ -59,11 +59,11 @@ public final class MainActivity extends Activity {
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
     private NaviEtaClient naviEtaClient;
-    private TextView mode, eta, routeStatus, topic, details, quizStatus, sdkStatus, playbackStatus, discoveries;
+    private TextView details, quizStatus, sdkStatus, playbackStatus, discoveries;
+    private NowPlayingCard nowPlaying;
     private Button quizButton;
-    private LinearLayout simulationPanel, playbackControls;
+    private LinearLayout simulationPanel;
     private Button debugToggleButton;
-    private Button dashboardBackButton;
     private PreDriveDashboard dashboard;
     private ScrollView dashboardScroll;
     private ScrollView briefingScroll;
@@ -76,7 +76,6 @@ public final class MainActivity extends Activity {
     private List<String> currentChunks = java.util.Collections.emptyList();
     private int chunkIndex;
     private String currentSegmentId;
-    private Button pauseButton;
     // Route-aware briefing (F2/F3/F5): A section before a region, B section after entering it.
     private final RegionTransition regionTransition = new RegionTransition();
     private final Set<String> regionsWithContent = new HashSet<>();
@@ -146,7 +145,7 @@ public final class MainActivity extends Activity {
                         runOnUiThread(() -> {
                             playbackActive = false;
                             playbackStatus.setText("Pleos TTS 오류 · " + error);
-                            pauseButton.setText("재생");
+                            nowPlaying.setPlaying(false);
                         });
                     }
                     @Override public void onStop() { }
@@ -189,35 +188,21 @@ public final class MainActivity extends Activity {
     }
 
     private void buildUi() {
-        int bg=getColor(R.color.routeonomy_background), ink=getColor(R.color.routeonomy_text);
+        int ink=UiStyle.INK;
+        UiStyle style = new UiStyle(this, 1f);
         briefingScroll = new ScrollView(this);
         briefingScroll.setFillViewport(true);
-        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setGravity(Gravity.CENTER_VERTICAL);
-        root.setPadding(28,24,28,24); root.setBackgroundColor(bg); briefingScroll.addView(root);
-        dashboardBackButton = button("주행 전 화면");
-        dashboardBackButton.setOnClickListener(v -> {
-            toolsOpen = false;
-            render();
-        });
-        root.addView(dashboardBackButton, full());
-        mode=label(16,ink); root.addView(mode);
-        eta=label(64,ink); eta.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(eta);
-        routeStatus=label(18,ink); root.addView(routeStatus);
-        locationStatus=label(13,ink); root.addView(locationStatus);
-        topic=label(30,ink); topic.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(topic);
-        details=label(18,ink); root.addView(details);
-        discoveries=label(16,ink); root.addView(discoveries);
-        playbackStatus=label(16,ink); playbackStatus.setText("브리핑 대기"); root.addView(playbackStatus);
-        playbackControls=new LinearLayout(this);
-        pauseButton=button("재생"); pauseButton.setOnClickListener(v->{
-            if (!ttsReady) { playbackStatus.setText("Pleos TTS 준비 중"); return; }
-            if (playbackPaused) { playbackPaused=false; speakCurrentChunk(); }
-            else if (playbackActive) { playbackPaused=true; playbackActive=false; tts.stop(); playbackStatus.setText("일시정지됨 · 현재 문장 처음부터 재개"); pauseButton.setText("재개"); }
-            else speakCurrent();
-        }); playbackControls.addView(pauseButton,weight());
-        Button next=button("다음 주제"); next.setOnClickListener(v->advanceBriefing(false)); playbackControls.addView(next,weight()); root.addView(playbackControls);
+        LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
+        nowPlaying = new NowPlayingCard(this, () -> { toolsOpen = false; render(); }, this::togglePlayback, () -> advanceBriefing(false));
+        root.addView(nowPlaying, full());
+        playbackStatus = nowPlaying.playbackStatusView();
+        // P only: script, discoveries, quiz entry and tools below the Now Playing card.
+        details=infoCard(style); discoveries=infoCard(style);
+        locationStatus=label(13,UiStyle.MUTED);
 
         debugToggleButton=button("시뮬레이션 입력 열기");
+        root.addView(details,cardParams(style)); root.addView(discoveries,cardParams(style)); root.addView(locationStatus);
         simulationPanel=new LinearLayout(this); simulationPanel.setOrientation(LinearLayout.VERTICAL);
         debugToggleButton.setOnClickListener(v->{simulationOpen=!simulationOpen;debugToggleButton.setText(simulationOpen?"시뮬레이션 입력 닫기":"시뮬레이션 입력 열기");render();});
         root.addView(debugToggleButton,full());
@@ -244,8 +229,8 @@ public final class MainActivity extends Activity {
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
         demoMovePanel.setVisibility(View.GONE); root.addView(demoMovePanel);
 
-        quizStatus=label(18,ink); root.addView(quizStatus);
-        quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,full());
+        quizStatus=label(18,ink); root.addView(quizStatus,1);
+        quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
         quizPanel=new LinearLayout(this); quizPanel.setOrientation(LinearLayout.VERTICAL);
         quizQuestionText=label(22,ink); quizQuestionText.setTypeface(Typeface.DEFAULT,Typeface.BOLD); quizPanel.addView(quizQuestionText);
         quizChoices=new LinearLayout(this); quizChoices.setOrientation(LinearLayout.VERTICAL); quizPanel.addView(quizChoices);
@@ -291,6 +276,30 @@ public final class MainActivity extends Activity {
         dashboardScroll.addView(dashboard);
         CharSequence status = playbackStatus.getText();
         if (!ttsReady && status.toString().startsWith("Pleos")) dashboard.showStatus(status); // keep a TTS failure notice
+    }
+
+    private void togglePlayback() {
+        if (!ttsReady) { playbackStatus.setText("Pleos TTS 준비 중"); return; }
+        if (playbackPaused) { playbackPaused = false; speakCurrentChunk(); }
+        else if (playbackActive) {
+            playbackPaused = true; playbackActive = false; tts.stop();
+            playbackStatus.setText("일시정지됨 · 현재 문장 처음부터 재개");
+            nowPlaying.setPlaying(false);
+        } else speakCurrent();
+    }
+
+    private TextView infoCard(UiStyle style) {
+        TextView card = style.text("", 17, UiStyle.INK, false);
+        card.setLineSpacing(style.size(4), 1f);
+        card.setPadding(style.size(20), style.size(16), style.size(20), style.size(16));
+        style.card(card);
+        return card;
+    }
+
+    private LinearLayout.LayoutParams cardParams(UiStyle style) {
+        LinearLayout.LayoutParams params = full();
+        params.topMargin = style.size(16);
+        return params;
     }
 
     private void openTools(boolean showSimulation) {
@@ -428,7 +437,7 @@ public final class MainActivity extends Activity {
         return dest + "\n경유 예상 지역 없음";
     }
     private void addGearButton(LinearLayout row,String title,DriveSession.Gear gear){Button b=button(title);b.setOnClickListener(v->{fake.setGear(gear);render();});row.addView(b,weight());}
-    private TextView label(int size,int color){TextView v=new TextView(this);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,8,0,8);return v;}
+    private TextView label(int size,int color){TextView v=new TextView(this);v.setTextSize(size);v.setTextColor(color);v.setPadding(0,16,0,16);return v;}
     private Button button(String title){Button b=new Button(this);b.setText(title);return b;}
     private LinearLayout.LayoutParams full(){return new LinearLayout.LayoutParams(-1,-2);}
     private LinearLayout.LayoutParams weight(){return new LinearLayout.LayoutParams(0,-2,1);}
@@ -438,14 +447,13 @@ public final class MainActivity extends Activity {
         boolean showDashboard = preDrive && !toolsOpen;
         dashboardScroll.setVisibility(showDashboard ? View.VISIBLE : View.GONE);
         briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
-        dashboardBackButton.setVisibility(preDrive ? View.VISIBLE : View.GONE);
-        mode.setText(driving?"주행 모드":"주차 모드");
-        mode.setVisibility(driving?View.GONE:View.VISIBLE);
+        nowPlaying.setDriving(driving, preDrive);
         BriefingSegment current = plan.getSegments().isEmpty() ? null : plan.getSegments().get(0);
         dashboard.bindTopic(current, canChangeDashboardTopic());
-        eta.setText("목적지까지 " + session.etaMinutes()+"분");
         String route = routeStatusText();
-        routeStatus.setText(route);
+        boolean playingCurrent = current != null && current.getId().equals(currentSegmentId);
+        nowPlaying.bind(current, route.substring(route.indexOf('\n') + 1), session.etaMinutes(),
+                playingCurrent ? chunkIndex : 0, playingCurrent ? currentChunks.size() : 0);
         String mapRegion = regionTransition.enteredRegionId() != null ? regionTransition.enteredRegionId()
                 : prediction != null ? prediction.getRegion().getId() : null;
         routeMap.setState(currentLocation, mapRegion, regionTransition.enteredRegionId() != null,
@@ -453,12 +461,10 @@ public final class MainActivity extends Activity {
                 locationSourceStatus + " · " + trip.getDestination().getName() + "까지 " + session.etaMinutes() + "분");
         locationStatus.setText(locationStatusText());
         locationStatus.setVisibility(driving?View.GONE:View.VISIBLE);
-        topic.setText(current == null ? "브리핑 없음" : current.getTopic());
-        details.setText(current == null ? "" : current.getScript() + "\n새 용어: " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
+        details.setText(current == null ? "브리핑 원고 없음" : "원고\n" + current.getScript() + "\n\n새 용어 · " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
         details.setVisibility(driving?View.GONE:View.VISIBLE);
         discoveries.setText(discoveryText());
         discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
-        playbackControls.setVisibility(driving?View.GONE:View.VISIBLE);
         debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
         simulationPanel.setVisibility(simulationOpen && !driving ? View.VISIBLE : View.GONE);
         // Demo-only: the movement row stays available in D so the region switch can be shown while driving.
@@ -475,7 +481,7 @@ public final class MainActivity extends Activity {
                 : quizEmptyNotice ? "아직 끝까지 들은 브리핑이 없어 풀 수 있는 퀴즈가 없습니다." : "목적지 도착 확인 · 정차 중 퀴즈 가능");
         renderQuiz();
         if (!playbackPaused && !playbackActive && !waitingForRegion && playbackStatus != null && !playbackStatus.getText().toString().startsWith("재생 완료") && !playbackStatus.getText().toString().startsWith("Pleos TTS 오류") && !playbackStatus.getText().toString().startsWith("Pleos TTS 초기화 실패")) playbackStatus.setText(ttsReady?"브리핑 재생 준비":"TTS 초기화 중");
-        if(pauseButton!=null) pauseButton.setText(playbackPaused?"재개":"재생/일시정지");
+        nowPlaying.setPlaying(playbackActive);
     }
     private void startQuiz(){
         if (!session.canStartQuiz()) return;
@@ -635,13 +641,9 @@ public final class MainActivity extends Activity {
     private void speakCurrentChunk() {
         if (currentSegmentId == null || currentChunks.isEmpty() || !ttsReady) return;
         playbackPaused=false; playbackActive=true;
-        if (!briefingStarted) {
-            briefingStarted = true;
-            render();
-        }
-        BriefingSegment segment=plan.getSegments().get(0);
-        playbackStatus.setText("Pleos TTS 재생 중 · "+segment.getTopic());
-        pauseButton.setText("일시정지");
+        briefingStarted = true;
+        playbackStatus.setText("Pleos TTS 재생 중");
+        render(); // Now Playing title, sentence progress and pause icon
         tts.speak(currentChunks.get(chunkIndex), true);
     }
     private void onChunkDone() {
