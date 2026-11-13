@@ -7,10 +7,10 @@
 `ui -> domain`; `data -> domain`; `pleos -> domain`; `simulation -> domain`. 조립 지점인 앱 진입점만 각 구현체를 연결한다. Domain은 Android, UI, JSON 라이브러리, Pleos SDK를 참조하지 않는다. UI는 Pleos SDK를 직접 호출하지 않는다.
 
 ## 핵심 계약
-Domain 경계의 계약은 기어/경로·구간 시간/지역 진입/도착 관찰 입력, `SegmentRepository`, `BriefingPlanner`, `SessionController`, `SpeechOutput`, `QuizPolicy`로 작게 유지한다. 실제 구현과 Fake 구현은 같은 입력·출력 의미를 가져야 한다. 도착은 목적지 반경(300m) 진입으로 판정한다. 내비 `onDestinationArrived`는 AVD에서 유도할 수 없어 쓰지 않는다. Fake 도착 토글은 백업으로 남긴다.
+Domain 경계의 계약은 기어/경로·구간 시간/지역 진입/도착 관찰 입력, `SegmentRepository`, `BriefingPlanner`, `SessionController`, `SpeechOutput`, `QuizPolicy`로 작게 유지한다. 실제 구현과 Fake 구현은 같은 입력·출력 의미를 가져야 한다. 도착은 목적지 반경(300m) 진입으로 판정한다. 내비 `onDestinationArrived`는 AVD에서 유도할 수 없어 쓰지 않는다. 도착 백업은 '기흥역 근처' 이동 버튼이다(도착 토글은 제거).
 
 ### 더미 경로에서 실제 SDK로의 교체
-경로 판단 입력은 domain의 계약(현재 위치 좌표, 목적지 좌표, 목적지까지 남은 시간, 지역 진입 이벤트)으로만 들어온다. 거리 계산, 경유 예측(우회 비율·후보 제외·선택), 반경 진입 판정, 구간별 계획은 domain의 순수 함수로 구현하고 단위 테스트한다. 즉 판단 로직은 실제 코드이며 더미인 것은 입력뿐이다. MVP는 `simulation`의 더미 구현(로컬 JSON 좌표·남은 시간, 위치 이동 버튼 3개)을 쓰고, 이후 `pleos` 어댑터가 같은 계약을 구현한다. 앱 진입점에서 구현체만 바꾸며 domain·ui는 수정하지 않는 것을 목표로 한다. 별도 Gradle 모듈은 만들지 않는다.
+경로 판단 입력은 domain의 계약(현재 위치 좌표, 목적지 좌표, 목적지까지 남은 시간, 지역 진입 이벤트)으로만 들어온다. 거리 계산, 경유 예측(우회 비율·후보 제외·선택), 반경 진입 판정, 구간별 계획은 domain의 순수 함수로 구현하고 단위 테스트한다. 즉 판단 로직은 실제 코드이며 더미인 것은 입력뿐이다. MVP는 `simulation`의 더미 구현(로컬 JSON 좌표·남은 시간, 위치 이동 버튼 2개)을 쓰고, 이후 `pleos` 어댑터가 같은 계약을 구현한다. 앱 진입점에서 구현체만 바꾸며 domain·ui는 수정하지 않는 것을 목표로 한다. 별도 Gradle 모듈은 만들지 않는다.
 
 실제 입력 후보는 NaviHelper 3.0.5 / navi-data 3.0.4 소스 KDoc과 공식 문서(document.pleos.ai, 2026-11-11 확인)에서 찾은 것이며, **AVD·실차 동작은 미검증**이다. 지도·경로 API는 Pleos로 한정한다.
 - 경로 선형(polyline)이나 구간별 소요 시간을 주는 API는 소스와 문서 어디에도 없다. 그래서 출발 시에는 좌표로 경유를 예측만 하고, A는 조각 단위로 이어 가며, B는 진입 순간의 남은 시간으로 계획한다.
