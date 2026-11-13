@@ -96,6 +96,10 @@ public final class MainActivity extends Activity {
     private boolean homeShown;
     private boolean arrivalCelebrated; // the popup is shown once per app run
     private ScrollView quizScroll;
+    // Points given for the last submitted answer, for the quiz feedback line.
+    private QuizSession awardQuiz;
+    private int awardPosition = -1;
+    private int awardPoints;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -531,12 +535,16 @@ public final class MainActivity extends Activity {
     }
     private void onQuizAnswer(int choice){
         if (quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
-        quiz.answer(choice);
+        String segmentId = quiz.current().getSegmentId();
+        boolean correct = quiz.answer(choice);
+        awardQuiz = quiz;
+        awardPosition = quiz.position();
+        awardPoints = progress.rewardQuizAnswer(segmentId, correct); // first answer per question per drive
         renderQuiz();
     }
     private void onQuizNext(){
         if (quiz == null) return;
-        if (quiz.isFinished()) quiz.restart();
+        if (quiz.isFinished()) { quiz.restart(); awardQuiz = null; }
         else if (quiz.isAnswered()) quiz.next();
         renderQuiz();
     }
@@ -548,7 +556,27 @@ public final class MainActivity extends Activity {
         String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice();
         if (java.util.Objects.equals(key, renderedQuizKey)) return;
         renderedQuizKey = key;
-        if (quiz != null) quizScreen.bind(quiz, quizHint());
+        if (quiz != null) quizScreen.bind(quiz, quizHint(), quizRewards);
+    }
+    private final QuizScreen.Rewards quizRewards = new QuizScreen.Rewards() {
+        private String segmentId() {
+            QuizQuestion question = quiz == null ? null : quiz.current();
+            return question == null ? null : question.getSegmentId();
+        }
+        @Override public boolean payHint() { String id = segmentId(); return id != null && progress.payHint(id); }
+        @Override public boolean canShowHint() { String id = segmentId(); return id != null && progress.canShowHint(id); }
+        @Override public boolean isHintPaid() { String id = segmentId(); return id != null && progress.isHintPaid(id); }
+        @Override public int answerPoints() {
+            return quiz == awardQuiz && quiz != null && quiz.position() == awardPosition ? awardPoints : 0;
+        }
+        @Override public String resultLine() {
+            return "이번 퀴즈 +" + progress.quizPointsThisRun() + " 포인트 · 지금 " + stageText();
+        }
+    };
+    /** e.g. "🌱 새싹 Lv.2". */
+    private String stageText() {
+        com.routeonomy.app.domain.GrowthStage stage = progress.stage();
+        return stage.getEmoji() + " " + stage.getLabel() + " Lv." + stage.getLevel();
     }
     /** Hint for the current question: the new term of the briefing it came from. */
     private String quizHint(){

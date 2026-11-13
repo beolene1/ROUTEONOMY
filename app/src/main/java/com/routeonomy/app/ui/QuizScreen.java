@@ -21,6 +21,18 @@ import java.util.function.IntConsumer;
  * The pending (not yet submitted) choice lives only here; grading stays in [QuizSession].
  */
 final class QuizScreen extends LinearLayout {
+    /** Points shown on the quiz; implemented by the activity over PlayerProgress. */
+    interface Rewards {
+        /** Pays for the current question's hint (once); false when there are not enough points. */
+        boolean payHint();
+        boolean canShowHint();
+        boolean isHintPaid();
+        /** Points given for the answer to the current question (0 on "다시 풀기"). */
+        int answerPoints();
+        /** Result screen line, e.g. "이번 퀴즈 +7 포인트 · 🌱 새싹 Lv.2". */
+        String resultLine();
+    }
+
     private static final int WRONG_FILL = 0xfff7e4df;
     private static final int WRONG = 0xffb4533f;
 
@@ -38,6 +50,7 @@ final class QuizScreen extends LinearLayout {
     private final TextView hintButton;
     private final TextView primary;
     private QuizSession quiz;
+    private Rewards rewards;
     private String hint;
     private Integer pending;
     private String note; // hint or help text kept while the user picks a choice
@@ -120,8 +133,9 @@ final class QuizScreen extends LinearLayout {
     }
 
     /** Called when the quiz object, question or answer changed; drops any unsubmitted selection. */
-    void bind(QuizSession quiz, String hintText) {
+    void bind(QuizSession quiz, String hintText, Rewards rewards) {
         this.quiz = quiz;
+        this.rewards = rewards;
         this.hint = hintText;
         pending = null;
         note = null;
@@ -143,8 +157,8 @@ final class QuizScreen extends LinearLayout {
         if (finished) {
             number.setText("");
             question.setText("퀴즈 결과 · " + total + "문제 중 " + quiz.score() + "개 정답");
-            showFeedback(quiz.score() == total ? "모두 맞혔어요! 오늘 브리핑을 잘 기억하고 계시네요."
-                    : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.", quiz.score() == total);
+            showFeedback((quiz.score() == total ? "모두 맞혔어요! 오늘 브리핑을 잘 기억하고 계시네요."
+                    : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.") + "\n" + rewards.resultLine(), quiz.score() == total);
             hintButton.setVisibility(INVISIBLE);
             setPrimary("다시 풀기", true);
             return;
@@ -173,13 +187,19 @@ final class QuizScreen extends LinearLayout {
         }
 
         hintButton.setVisibility(selected == null && hint != null && !hint.isEmpty() ? VISIBLE : INVISIBLE);
+        boolean hintAvailable = rewards.canShowHint();
+        hintButton.setText(rewards.isHintPaid() ? "힌트 다시 보기" : hintAvailable ? "힌트 확인하기 · 1P" : "힌트 · 포인트 부족");
+        hintButton.setEnabled(hintAvailable);
+        hintButton.setAlpha(hintAvailable ? 1f : 0.45f);
         if (selected == null) {
             if (note == null) feedback.setVisibility(GONE);
             else showFeedback(note, true);
             setPrimary("정답 제출하기", pending != null);
         } else {
             boolean correct = selected == current.getAnswerIndex();
+            int points = rewards.answerPoints();
             showFeedback((correct ? "정답입니다!" : "아쉬워요. 정답은 " + letter(current.getAnswerIndex()) + "입니다.")
+                    + (points > 0 ? " +" + points + " 포인트" : "")
                     + "\n" + current.getExplanation(), correct);
             setPrimary(quiz.position() + 1 < total ? "다음 문제" : "결과 보기", true);
         }
@@ -235,15 +255,16 @@ final class QuizScreen extends LinearLayout {
     }
 
     private void showHint() {
-        if (hint == null || hint.isEmpty()) return;
+        if (hint == null || hint.isEmpty() || quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
+        if (!rewards.payHint()) return;
         note = "힌트 · " + hint;
-        showFeedback(note, true);
+        refresh(); // shows the note and the paid hint label
     }
 
     private void showHelp() {
         if (quiz == null || quiz.isFinished()) return;
         if (quiz.isAnswered()) return; // keep the explanation visible
-        note = "선택지를 하나 고른 뒤 '정답 제출하기'를 누르세요. 막히면 '힌트 확인하기'로 새 용어를 볼 수 있어요.";
+        note = "선택지를 하나 고른 뒤 '정답 제출하기'를 누르세요. 막히면 '힌트 확인하기'(1포인트)로 새 용어를 볼 수 있어요. 정답 3포인트, 오답 1포인트.";
         showFeedback(note, true);
     }
 
