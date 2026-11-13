@@ -76,6 +76,15 @@ class BriefingSessionTest {
         assertEquals(setOf("m2"), session.completedSegmentIds())
     }
 
+    @Test fun finishedTopicStaysCompletedWhenReplayedAndSkipped() {
+        session.startFromDashboard()
+        finishSegment() // m1 heard to the end
+        session.previousTopic() // replay m1
+        session.nextTopic()     // skip the replay
+        session.nextTopic()     // skip m2
+        assertEquals(setOf("m1"), session.completedSegmentIds())
+    }
+
     @Test fun regionEntryWhilePlayingSwitchesOnceAfterCurrentSegment() {
         session.startFromDashboard()
         assertFalse(session.onRegionEntered("pangyo"))
