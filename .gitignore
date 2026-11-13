@@ -19,4 +19,7 @@ local.properties
 /docs/reference/
 /docs/*.pdf
 /docs/HANDOFF.md
+# Internal demo notes and progress table (kept locally, not published)
+/docs/DEMO.md
+/docs/DEVELOPMENT_STATUS.md
 /.agents/
