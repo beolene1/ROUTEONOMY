@@ -85,6 +85,17 @@ class BriefingSessionTest {
         assertEquals(setOf("m1"), session.completedSegmentIds())
     }
 
+    @Test fun completionListenerFiresOncePerSegment() {
+        val heard = mutableListOf<String>()
+        session.setCompletionListener { heard += it.id }
+        session.startFromDashboard()
+        finishSegment() // m1
+        session.previousTopic()
+        finishSegment() // m1 again
+        session.nextTopic() // skip m2
+        assertEquals(listOf("m1"), heard)
+    }
+
     @Test fun regionEntryWhilePlayingSwitchesOnceAfterCurrentSegment() {
         session.startFromDashboard()
         assertFalse(session.onRegionEntered("pangyo"))

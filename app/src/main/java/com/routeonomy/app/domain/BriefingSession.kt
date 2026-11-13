@@ -51,6 +51,7 @@ class BriefingSession @JvmOverloads constructor(
     private var failed = false
     private var speechReady = false
     private var autoplayHeld = false
+    private var completionListener: ((BriefingSegment) -> Unit)? = null
 
     init {
         updatePrediction()
@@ -82,6 +83,9 @@ class BriefingSession @JvmOverloads constructor(
     // ---- inputs ----
 
     fun setSpeechReady(ready: Boolean) { speechReady = ready }
+
+    /** Called once per segment, the first time it is heard to the end (e.g. to give points). */
+    fun setCompletionListener(listener: ((BriefingSegment) -> Unit)?) { completionListener = listener }
 
     /** While held (e.g. the home screen is shown) a region entry or new estimate does not start audio by itself. */
     fun setAutoplayHeld(held: Boolean) { autoplayHeld = held }
@@ -234,7 +238,7 @@ class BriefingSession @JvmOverloads constructor(
     private fun advance(completed: Boolean) {
         val previous = plan.segments.firstOrNull() ?: return
         speech.stop()
-        if (completed) completedIds += previous.id
+        if (completed && completedIds.add(previous.id)) completionListener?.invoke(previous)
         playedIds += previous.id
         active = false
         paused = false

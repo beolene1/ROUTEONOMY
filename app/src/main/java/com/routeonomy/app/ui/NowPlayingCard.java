@@ -28,6 +28,8 @@ final class NowPlayingCard extends LinearLayout {
     private final TextView playbackStatus;
     private final TextView playButton;
     private final View settingsButton;
+    private final TextView levelLabel;
+    private final TextView levelDetail;
 
     NowPlayingCard(Context context, Runnable onBack, Runnable onPlayPause, Runnable onPrevious, Runnable onNext,
             Runnable onSettings) {
@@ -116,7 +118,16 @@ final class NowPlayingCard extends LinearLayout {
 
         LinearLayout level = row();
         level.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
-        level.addView(style.text("Level. 1", 24, UiStyle.INK, false));
+        LinearLayout levelText = new LinearLayout(context);
+        levelText.setOrientation(VERTICAL);
+        levelText.setGravity(Gravity.END);
+        levelLabel = style.text("", 24, UiStyle.INK, false);
+        levelLabel.setGravity(Gravity.END);
+        levelText.addView(levelLabel);
+        levelDetail = style.text("", 14, UiStyle.MUTED, false);
+        levelDetail.setGravity(Gravity.END);
+        levelText.addView(levelDetail);
+        level.addView(levelText, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         settingsButton = style.iconButton(style.picture(R.drawable.pre_drive_settings), 28, "시뮬레이션 설정", onSettings);
         settingsButton.setBackground(style.shape(UiStyle.MINT, 25));
         LayoutParams settingsParams = new LayoutParams(style.size(48), style.size(48));
@@ -148,6 +159,12 @@ final class NowPlayingCard extends LinearLayout {
         ((LayoutParams) progressFill.getLayoutParams()).weight = done;
         ((LayoutParams) progressRest.getLayoutParams()).weight = 1f - done;
         progressFill.requestLayout();
+    }
+
+    /** e.g. "🌱 새싹 Lv.2" and "다음 단계까지 45P · 보유 120P". */
+    void setLevel(String label, String detail) {
+        if (!label.contentEquals(levelLabel.getText())) levelLabel.setText(label);
+        if (!detail.contentEquals(levelDetail.getText())) levelDetail.setText(detail);
     }
 
     void setPlaying(boolean playing) {
