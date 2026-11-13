@@ -116,6 +116,13 @@ class PlayerProgress(private val store: ProgressStore) {
         save()
     }
 
+    /** Demo tool: leaves [gap] points to the next stage, so one heard segment shows a stage-up. */
+    @JvmOverloads
+    fun moveNearNextStage(gap: Int = PointRules.MAIN_SEGMENT) {
+        val toNext = pointsToNextStage() ?: return
+        addDemoPoints(toNext - gap)
+    }
+
     /** Demo tool: back to 씨앗 with no points. */
     fun resetAll() {
         earned = 0

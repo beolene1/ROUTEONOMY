@@ -198,6 +198,7 @@ public final class MainActivity extends Activity {
         // Demo only (video): set the points before recording so a stage-up can be shown.
         LinearLayout pointControls=new LinearLayout(this);
         Button addPoints=button("포인트 +100"); addPoints.setOnClickListener(v->{progress.addDemoPoints(100);render();}); pointControls.addView(addPoints,weight());
+        Button nearNext=button("다음 단계 직전"); nearNext.setOnClickListener(v->{progress.moveNearNextStage();render();}); pointControls.addView(nearNext,weight());
         Button resetPoints=button("포인트 초기화"); resetPoints.setOnClickListener(v->{progress.resetAll();render();}); pointControls.addView(resetPoints,weight());
         simulationPanel.addView(pointControls);
         // Demo-only movement row. It is the one simulation control kept on the driving screen.

@@ -66,6 +66,15 @@ class PlayerProgressTest {
         assertNull(progress.pointsToNextStage())
     }
 
+    @Test fun moveNearNextStageLeavesOneSegment() {
+        progress.moveNearNextStage()
+        assertEquals(295, progress.earnedTotal())
+        progress.moveNearNextStage() // already near: no change
+        assertEquals(295, progress.earnedTotal())
+        progress.rewardSegment("m1", BriefingSegment.Type.MAIN)
+        assertEquals(GrowthStage.SPROUT, progress.stageReachedThisRun())
+    }
+
     @Test fun loadsSavedProgressAndResets() {
         val loaded = PlayerProgress(MemoryStore(ProgressSnapshot(1_250, 40)))
         assertEquals(GrowthStage.STEM, loaded.stage())
