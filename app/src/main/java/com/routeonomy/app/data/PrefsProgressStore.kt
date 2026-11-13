@@ -1,6 +1,7 @@
 package com.routeonomy.app.data
 
 import android.content.Context
+import androidx.core.content.edit
 import com.routeonomy.app.domain.ProgressSnapshot
 import com.routeonomy.app.domain.ProgressStore
 
@@ -11,7 +12,7 @@ class PrefsProgressStore(context: Context) : ProgressStore {
     override fun load() = ProgressSnapshot(prefs.getInt(KEY_EARNED, 0), prefs.getInt(KEY_BALANCE, 0))
 
     override fun save(snapshot: ProgressSnapshot) {
-        prefs.edit().putInt(KEY_EARNED, snapshot.earnedTotal).putInt(KEY_BALANCE, snapshot.balance).apply()
+        prefs.edit { putInt(KEY_EARNED, snapshot.earnedTotal).putInt(KEY_BALANCE, snapshot.balance) }
     }
 
     private companion object {

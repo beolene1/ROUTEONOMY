@@ -25,14 +25,12 @@ class FakeRouteInputTest {
         assertEquals(40, input.remainingMinutes())
     }
 
-    @Test fun demoStopsShrinkRemainingTimeAndEntryLandsInsideRegion() {
+    @Test fun demoStopsShrinkRemainingTime() {
         val input = FakeRouteInput(trip, listOf(beforePangyo, nearGiheung))
         val atBefore = input.moveTo(beforePangyo)
         assertFalse(pangyo.contains(input.location))
-        val atEntry = input.enterRegion(pangyo)
-        assertTrue(pangyo.contains(input.location))
         val atEnd = input.moveTo(nearGiheung)
-        assertTrue("$atBefore > $atEntry > $atEnd", atBefore > atEntry && atEntry > atEnd)
+        assertTrue("$atBefore > $atEnd", atBefore > atEnd)
         assertEquals(1, atEnd)
     }
 }

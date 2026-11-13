@@ -56,12 +56,16 @@ final class ArrivalPopup extends FrameLayout {
         addView(card, cardParams);
     }
 
-    /** @param hasQuiz false when no briefing was heard to the end: only a close button is offered. */
-    void show(int heardCount, boolean hasQuiz) {
-        message.setText(heardCount > 0
+    /**
+     * @param hasQuiz false when no briefing was heard to the end: only a close button is offered.
+     * @param pointsLine points earned this drive and the growth stage
+     */
+    void show(int heardCount, boolean hasQuiz, String pointsLine) {
+        message.setText((heardCount > 0
                 ? "목적지에 도착했어요.\n오늘 " + heardCount + "개의 이야기를 끝까지 들었어요."
                         + (hasQuiz ? "\n들은 내용으로 퀴즈를 풀어 볼까요?" : "")
-                : "목적지에 도착했어요.\n끝까지 들은 이야기가 없어 퀴즈는 다음에 풀어요.");
+                : "목적지에 도착했어요.\n끝까지 들은 이야기가 없어 퀴즈는 다음에 풀어요.")
+                + "\n\n" + pointsLine);
         quizButton.setVisibility(hasQuiz ? VISIBLE : GONE);
         cancelButton.setText(hasQuiz ? "취소" : "확인");
         setVisibility(VISIBLE);

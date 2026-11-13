@@ -25,6 +25,8 @@ final class PreDriveDashboard extends LinearLayout {
     private final UiStyle style;
     private final boolean narrow;
     private final TextView topic;
+    private TextView greetingTitle;
+    private String stageName = "새싹";
     private final TextView description;
     private final TextView status;
     private final TextView startButton;
@@ -175,6 +177,17 @@ final class PreDriveDashboard extends LinearLayout {
         });
     }
 
+    /** Greets with the current growth stage name, e.g. "씨앗님". */
+    void setStageName(String name) {
+        if (name.equals(stageName)) return;
+        stageName = name;
+        if (greetingTitle != null) greetingTitle.setText(greetingText());
+    }
+
+    private String greetingText() {
+        return "안녕하세요,\n" + stageName + "님 좋은 아침입니다!";
+    }
+
     void showStatus(CharSequence message) {
         status.setText(message);
         status.setVisibility(message.length() == 0 ? GONE : VISIBLE);
@@ -188,8 +201,9 @@ final class PreDriveDashboard extends LinearLayout {
         LinearLayout hero = row();
         hero.setMinimumHeight(size(180));
         LinearLayout copy = column();
-        TextView title = text("안녕하세요,\n새싹님 좋은 아침입니다!", narrow ? 34 : 40, INK, true);
+        TextView title = text(greetingText(), narrow ? 34 : 40, INK, true);
         title.setLineSpacing(size(2), 1f);
+        greetingTitle = title;
         copy.addView(title);
         copy.addView(text("오늘도 이동하는 시간을 성장의 시간으로 바꿔볼까요?", 20, MUTED, false),
                 rowParams(8));

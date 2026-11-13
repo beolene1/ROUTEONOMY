@@ -82,7 +82,6 @@ public final class MainActivity extends Activity {
     private int dashboardWidthDp = -1;
     private boolean simulationOpen;
     private LinearLayout demoMovePanel;
-    private Button enterButton;
     // Arrival quiz: null until started; dropped whenever P+ARRIVED no longer holds.
     private List<QuizQuestion> quizQuestions;
     private QuizSession quiz;
@@ -196,19 +195,15 @@ public final class MainActivity extends Activity {
         addGearButton(gears,"P",DriveSession.Gear.PARK); addGearButton(gears,"R",DriveSession.Gear.REVERSE);
         addGearButton(gears,"N",DriveSession.Gear.NEUTRAL); addGearButton(gears,"D",DriveSession.Gear.DRIVE);
         simulationPanel.addView(gears);
-        LinearLayout etaControls=new LinearLayout(this);
-        Button less=button("ETA −5분"); less.setOnClickListener(v->{fake.setEta(session.etaMinutes()-5);refreshRoute();}); etaControls.addView(less,weight());
-        Button more=button("ETA +5분"); more.setOnClickListener(v->{fake.setEta(session.etaMinutes()+5);refreshRoute();}); etaControls.addView(more,weight()); simulationPanel.addView(etaControls);
-        Button arrived=button("시뮬레이션 도착 토글"); arrived.setOnClickListener(v->{fake.markArrived(session.arrival()!=DriveSession.Arrival.ARRIVED);render();}); simulationPanel.addView(arrived,full());
+        // Demo only (video): set the points before recording so a stage-up can be shown.
+        LinearLayout pointControls=new LinearLayout(this);
+        Button addPoints=button("포인트 +100"); addPoints.setOnClickListener(v->{progress.addDemoPoints(100);render();}); pointControls.addView(addPoints,weight());
+        Button resetPoints=button("포인트 초기화"); resetPoints.setOnClickListener(v->{progress.resetAll();render();}); pointControls.addView(resetPoints,weight());
+        simulationPanel.addView(pointControls);
         // Demo-only movement row. It is the one simulation control kept on the driving screen.
         demoMovePanel=new LinearLayout(this); demoMovePanel.setOrientation(LinearLayout.VERTICAL);
         List<Place> stops = fakeRoute.stops();
         if (!stops.isEmpty()) addMoveButton(stops.get(0));
-        enterButton=button("지역 진입"); enterButton.setOnClickListener(v->{
-            Region target=entryTarget(); if(target==null) return;
-            geofenceGate.onExit(target.getId()); // the jump starts outside the region, even if real tracking reset the gate
-            fakeRoute.enterRegion(target); applyLocation(fakeRoute.getLocation());
-        }); demoMovePanel.addView(enterButton,full());
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
@@ -368,12 +363,6 @@ public final class MainActivity extends Activity {
     }
 
     private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
-    /** The demo can only enter the region the trip is predicted to pass; nothing once a region was entered. */
-    private Region entryTarget(){
-        RegionPrediction prediction = briefing.prediction();
-        if (briefing.enteredRegionId() != null || prediction == null) return null;
-        return prediction.getRegion();
-    }
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
     private void onRealLocation(GeoPoint point) {
@@ -465,6 +454,10 @@ public final class MainActivity extends Activity {
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
         float tripProgress = 1f - driveLeft / (float) Math.max(1, trip.getRemainingMinutes());
         nowPlaying.bind(current, firstSentence(current), (int) (briefing.studyMillis() / 60_000), driveLeft, tripProgress);
+        Integer toNext = progress.pointsToNextStage();
+        nowPlaying.setLevel(stageText(), (toNext == null ? "마지막 단계" : "다음 단계까지 " + toNext + "P")
+                + " · 보유 " + progress.balance() + "P");
+        dashboard.setStageName(progress.stage().getLabel());
         String entered = briefing.enteredRegionId();
         RegionPrediction prediction = briefing.prediction();
         String mapRegion = entered != null ? entered : prediction != null ? prediction.getRegion().getId() : null;
@@ -481,9 +474,6 @@ public final class MainActivity extends Activity {
         simulationPanel.setVisibility(simulationOpen && !driving ? View.VISIBLE : View.GONE);
         // Demo-only: the movement row stays available in D so the region switch can be shown while driving.
         demoMovePanel.setVisibility(simulationOpen ? View.VISIBLE : View.GONE);
-        Region target = entryTarget();
-        enterButton.setText((target == null ? "지역" : target.getName()) + " 진입");
-        enterButton.setEnabled(target != null);
         boolean quizAllowed = session.canStartQuiz();
         if (!quizAllowed) {
             quiz = null; quizEmptyNotice = false; arrivalPopup.hide(); // left P or arrival was cleared: stop the quiz
@@ -493,8 +483,11 @@ public final class MainActivity extends Activity {
         else if (!arrivalCelebrated) {
             // First time arrival and P hold together: praise, then offer the quiz.
             arrivalCelebrated = true;
+            com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
             arrivalPopup.show(briefing.completedSegmentIds().size(),
-                    !QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds()).isEmpty());
+                    !QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds()).isEmpty(),
+                    "이번 주행 +" + progress.earnedThisRun() + " 포인트 · 지금 " + stageText()
+                            + (grown == null ? "" : "\n" + grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요!"));
         }
         quizButton.setVisibility(driving || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
         quizButton.setText(quiz != null && quizHidden && !quiz.isFinished() ? "퀴즈 이어 풀기" : "도착 후 퀴즈 시작");
