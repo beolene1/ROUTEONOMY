@@ -15,6 +15,7 @@ import java.util.Locale;
 import com.routeonomy.app.data.AssetQuizRepository;
 import com.routeonomy.app.data.AssetRouteRepository;
 import com.routeonomy.app.data.AssetSegmentRepository;
+import com.routeonomy.app.data.PrefsProgressStore;
 import com.routeonomy.app.domain.BriefingSegment;
 import com.routeonomy.app.domain.BriefingSession;
 import com.routeonomy.app.domain.DriveSession;
@@ -22,6 +23,7 @@ import com.routeonomy.app.domain.GeoPoint;
 import com.routeonomy.app.domain.Geofence;
 import com.routeonomy.app.domain.GeofenceGate;
 import com.routeonomy.app.domain.Place;
+import com.routeonomy.app.domain.PlayerProgress;
 import com.routeonomy.app.domain.QuizQuestion;
 import com.routeonomy.app.domain.QuizSession;
 import com.routeonomy.app.domain.Region;
@@ -44,6 +46,8 @@ public final class MainActivity extends Activity {
     private List<BriefingSegment> segments;
     // Queue, current sentence, finished segments and the A→B switch (F3/F4/F5/F7).
     private BriefingSession briefing;
+    // Points and growth stage, kept across drives.
+    private PlayerProgress progress;
     private PleosTtsSpeaker speaker;
     private FakeVehicleInput fake;
     private GearMonitor gearMonitor;
@@ -136,6 +140,11 @@ public final class MainActivity extends Activity {
         });
         briefing = new BriefingSession(segments, regions, trip.getDestination().getLocation(), currentLocation,
                 session.etaMinutes(), speaker, () -> android.os.SystemClock.elapsedRealtime());
+        progress = new PlayerProgress(new PrefsProgressStore(this));
+        briefing.setCompletionListener(segment -> {
+            progress.rewardSegment(segment.getId(), segment.getType());
+            return kotlin.Unit.INSTANCE;
+        });
         buildUi();
         render();
         speaker.initialize();
