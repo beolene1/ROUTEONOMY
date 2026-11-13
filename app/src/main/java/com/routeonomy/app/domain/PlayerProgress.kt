@@ -123,7 +123,7 @@ class PlayerProgress(private val store: ProgressStore) {
         addDemoPoints(toNext - gap)
     }
 
-    /** Demo tool: back to 씨앗 with no points. */
+    /** Demo tool: back to 씨앗 with no points. Also forgets this run's rewards, so quiz answers can earn again. */
     fun resetAll() {
         earned = 0
         balance = 0

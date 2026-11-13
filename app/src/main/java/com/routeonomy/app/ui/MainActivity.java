@@ -547,7 +547,9 @@ public final class MainActivity extends Activity {
         quizScroll.setVisibility(showQuiz ? View.VISIBLE : View.GONE);
         if (showQuiz) briefingScroll.setVisibility(View.GONE);
         // render() runs on many unrelated events; rebind only when the quiz state changed.
-        String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice();
+        // Points are in the key too: demo point buttons change whether the hint can be shown.
+        String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice()
+                + ":" + progress.balance() + ":" + quizRewards.isHintPaid();
         if (java.util.Objects.equals(key, renderedQuizKey)) return;
         renderedQuizKey = key;
         if (quiz != null) quizScreen.bind(quiz, quizHint(), quizRewards);

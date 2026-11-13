@@ -26,7 +26,7 @@ final class PreDriveDashboard extends LinearLayout {
     private final boolean narrow;
     private final TextView topic;
     private TextView greetingTitle;
-    private String stageName = "새싹";
+    private String stageName = "씨앗";
     private final TextView description;
     private final TextView status;
     private final TextView startButton;
