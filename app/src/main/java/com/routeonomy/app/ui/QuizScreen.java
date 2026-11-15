@@ -44,6 +44,8 @@ final class QuizScreen extends LinearLayout {
     private static final int PICKED_FILL = 0xffcdf7cf;
     private static final int PICKED_BADGE = 0xff9bd8a8;
     private static final int WRONG_FILL = 0xffffcfcf;
+    /** Box behind the wrong-answer explanation, the red twin of the mint one of a right answer. */
+    private static final int WRONG_NOTE = 0xfffbe3e0;
     private static final int WRONG_BADGE = 0xffe58b8b;
     private static final int WRONG = 0xffd23f31;
     private static final int HINT_FILL = 0xffeef8cf;
@@ -52,6 +54,8 @@ final class QuizScreen extends LinearLayout {
     private final IntConsumer onSubmit;
     private final Runnable onNext;
     private final Runnable onReview;
+    private final Runnable onHome;
+    private final TextView retry;
     private final TextView title;
     private final TextView intro;
     private final TextView progressLabel;
@@ -74,14 +78,16 @@ final class QuizScreen extends LinearLayout {
     private boolean whyShown;
 
     QuizScreen(Context context, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext,
-            Runnable onReview) {
+            Runnable onReview, Runnable onHome) {
         super(context);
         this.onSubmit = onSubmit;
         this.onNext = onNext;
         this.onReview = onReview;
+        this.onHome = onHome;
         style = new UiStyle(context, 1f);
         setOrientation(VERTICAL);
         setClipChildren(false);
+        setClipToPadding(false); // the grading mark reaches into the side padding
 
         addView(style.appHeader(false), matchWrap(0));
         // Sizes are Figma dp (FigmaFrame scales the column).
@@ -140,8 +146,10 @@ final class QuizScreen extends LinearLayout {
         FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(style.size(190), style.size(200),
                 Gravity.START | Gravity.CENTER_VERTICAL);
         markParams.leftMargin = -style.size(44);
+
         // Top layer: above the card (elevation 3) and the choice cards below it, never clipped.
         mark.view.setElevation(style.size(24));
+        mark.view.setTranslationY(-style.size(20)); // a little above the card's centre, as in Figma
         cardFrame.addView(mark.view, markParams);
         cardFrame.setTranslationZ(style.size(24));
         addView(cardFrame, matchWrap(12));
@@ -161,6 +169,16 @@ final class QuizScreen extends LinearLayout {
         feedbackParams.setMarginStart(style.size(26));
         feedbackParams.setMarginEnd(style.size(29));
         addView(feedback, feedbackParams);
+
+        // Result screen only: the quiz can still be taken again, the primary button goes home.
+        retry = style.text("↻  다시 풀기", 20, UiStyle.MUTED, true);
+        retry.setPadding(style.size(16), style.size(10), style.size(16), style.size(10));
+        style.clickable(retry, () -> onNext.run());
+        retry.setVisibility(GONE);
+        LayoutParams retryParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
+        retryParams.topMargin = style.size(10);
+        retryParams.setMarginStart(style.size(14));
+        addView(retry, retryParams);
 
         // Pushes the buttons to the bottom when the screen is taller than the content.
         addView(new View(context), new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
@@ -211,6 +229,7 @@ final class QuizScreen extends LinearLayout {
         ((LayoutParams) progressRest.getLayoutParams()).weight = 1f - share;
         progressFill.requestLayout();
         choices.removeAllViews();
+        retry.setVisibility(finished ? VISIBLE : GONE);
 
         if (finished) {
             badge.setVisibility(VISIBLE);
@@ -222,7 +241,7 @@ final class QuizScreen extends LinearLayout {
                     (perfect ? "오늘 브리핑을 잘 기억하고 계시네요." : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.")
                             + "\n" + rewards.resultLine(), UiStyle.MINT);
             setLeft("오늘의 정리", UiStyle.MUTED, true);
-            setPrimary("다시 풀기", true);
+            setPrimary("홈으로", true);
             return;
         }
         QuizQuestion current = quiz.current();
@@ -253,9 +272,8 @@ final class QuizScreen extends LinearLayout {
                 showNote("● 정답이에요!" + earned, UiStyle.GREEN, whyShown ? current.getExplanation() : null,
                         whyShown ? UiStyle.MINT : Color.TRANSPARENT);
             } else {
-                showNote("▲ Almost there !" + earned, WRONG, "정답은 " + letter(current.getAnswerIndex()) + "예요. "
-                        + current.getExplanation(), Color.TRANSPARENT);
-                if (!whyShown) feedback.setVisibility(GONE);
+                showNote("▲ Almost there !" + earned, WRONG, whyShown ? "정답은 " + letter(current.getAnswerIndex()) + "예요. "
+                        + current.getExplanation() : null, whyShown ? WRONG_NOTE : Color.TRANSPARENT);
             }
             setLeft("Learn why", correct ? UiStyle.MUTED : WRONG, true);
             leftButton.setContentDescription(whyShown ? "해설 숨기기" : "해설 보기");
@@ -301,7 +319,9 @@ final class QuizScreen extends LinearLayout {
 
     private void onPrimary() {
         if (quiz == null) return;
-        if (!quiz.isFinished() && !quiz.isAnswered()) {
+        if (quiz.isFinished()) {
+            onHome.run();
+        } else if (!quiz.isAnswered()) {
             if (pending != null) onSubmit.accept(pending);
         } else {
             onNext.run();
