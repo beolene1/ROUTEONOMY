@@ -37,7 +37,9 @@ final class PreDriveDashboard extends LinearLayout {
     private int heroArt;
     private String stageName = "씨앗";
     private final TextView description;
-    private final TextView badge; // the topic's category, e.g. "생활 경제"
+    private final TextView badge;
+    private final ImageView thumbnailImage;
+    private int boundThumbnail = R.drawable.pre_drive_chip; // the topic's category, e.g. "생활 경제"
     private final TextView status;
     private final TextView startButton;
     private final TextView changeButton;
@@ -102,7 +104,8 @@ final class PreDriveDashboard extends LinearLayout {
         FrameLayout thumbnail = new FrameLayout(context);
         thumbnail.setBackground(shape(MINT, 10));
         thumbnail.setClipToOutline(true);
-        place(thumbnail, picture(R.drawable.pre_drive_chip), 140, 92, Gravity.CENTER);
+        thumbnailImage = picture(R.drawable.pre_drive_chip);
+        thumbnail.addView(thumbnailImage, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         learning.addView(thumbnail, new LayoutParams(size(narrow ? 140 : 184), size(102)));
 
         LinearLayout copy = column();
@@ -148,6 +151,11 @@ final class PreDriveDashboard extends LinearLayout {
         topic.setText(segment == null ? "브리핑 없음" : segment.getTopic());
         BriefingSegment.Category category = segment == null ? null : segment.getCategory();
         badge.setText(category == null ? "Today’s learning" : category.getLabel());
+        int art = TopicVisuals.thumbnail(segment);
+        if (art != boundThumbnail) {
+            boundThumbnail = art;
+            thumbnailImage.setImageResource(art);
+        }
         description.setText(visuals.question == null ? "" : "★  " + visuals.question);
         description.setVisibility(visuals.question == null ? GONE : VISIBLE);
         bubble.setText(TopicVisuals.bubble(segment));
