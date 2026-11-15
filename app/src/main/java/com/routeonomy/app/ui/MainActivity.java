@@ -61,6 +61,7 @@ public final class MainActivity extends Activity {
     private ScrollView dashboardScroll;
     private ScrollView briefingScroll;
     private boolean toolsOpen;
+    private boolean detailsOpen; // P: script, discoveries, quiz entry and location under the Now Playing screen
     private boolean ttsReady;
     private String ttsProblem; // init failure / service not connected, shown until TTS is ready
     private String ttsError;   // last speech error, shown until playback restarts
@@ -179,7 +180,7 @@ public final class MainActivity extends Activity {
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
         nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
-                this::previousTopic, this::nextTopic, this::toggleSimulationFromCard);
+                this::previousTopic, this::nextTopic, this::toggleSimulationFromCard, this::toggleDetails);
         root.addView(nowPlaying, full());
         playbackStatus = nowPlaying.playbackStatusView();
         // P only: script, discoveries, quiz entry and tools below the Now Playing card.
@@ -277,6 +278,12 @@ public final class MainActivity extends Activity {
         if (simulationOpen) briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, debugToggleButton.getTop()));
     }
 
+    private void toggleDetails() {
+        detailsOpen = !detailsOpen;
+        render();
+        if (detailsOpen) briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, details.getTop()));
+    }
+
     private void togglePlayback() {
         briefing.togglePlayback();
         render();
@@ -343,6 +350,7 @@ public final class MainActivity extends Activity {
     private void openTools(boolean showSimulation) {
         setHomeShown(false);
         toolsOpen = true;
+        detailsOpen = true;
         simulationOpen = showSimulation;
         debugToggleButton.setText(showSimulation ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
         render();
@@ -454,7 +462,8 @@ public final class MainActivity extends Activity {
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
         float tripProgress = 1f - driveLeft / (float) Math.max(1, trip.getRemainingMinutes());
-        nowPlaying.bind(current, firstSentence(current), (int) (briefing.studyMillis() / 60_000), driveLeft, tripProgress);
+        String hook = TopicVisuals.of(current).question;
+        nowPlaying.bind(current, hook != null ? hook : firstSentence(current), (int) (briefing.studyMillis() / 60_000), driveLeft, tripProgress);
         Integer toNext = progress.pointsToNextStage();
         nowPlaying.setLevel(stageText(), (toNext == null ? "마지막 단계" : "다음 단계까지 " + toNext + "P")
                 + " · 보유 " + progress.balance() + "P");
@@ -466,12 +475,13 @@ public final class MainActivity extends Activity {
                 route.substring(route.indexOf('\n') + 1),
                 locationSourceStatus + " · " + trip.getDestination().getName() + "까지 " + session.etaMinutes() + "분");
         locationStatus.setText(locationStatusText());
-        locationStatus.setVisibility(driving?View.GONE:View.VISIBLE);
+        boolean showDetails = !driving && (detailsOpen || simulationOpen);
+        locationStatus.setVisibility(showDetails?View.VISIBLE:View.GONE);
         details.setText(current == null ? "브리핑 원고 없음" : "원고\n" + current.getScript() + "\n\n새 용어 · " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
-        details.setVisibility(driving?View.GONE:View.VISIBLE);
+        details.setVisibility(showDetails?View.VISIBLE:View.GONE);
         discoveries.setText(discoveryText());
-        discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
-        debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
+        discoveries.setVisibility(showDetails?View.VISIBLE:View.GONE);
+        debugToggleButton.setVisibility(showDetails?View.VISIBLE:View.GONE);
         simulationPanel.setVisibility(simulationOpen && !driving ? View.VISIBLE : View.GONE);
         // Demo-only: the movement row stays available in D so the region switch can be shown while driving.
         demoMovePanel.setVisibility(simulationOpen ? View.VISIBLE : View.GONE);
@@ -490,9 +500,9 @@ public final class MainActivity extends Activity {
                     "이번 주행 +" + progress.earnedThisRun() + " 포인트 · 지금 " + stageText()
                             + (grown == null ? "" : "\n" + grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요!"));
         }
-        quizButton.setVisibility(driving || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
+        quizButton.setVisibility(!showDetails || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
         quizButton.setText(quiz != null && quizHidden && !quiz.isFinished() ? "퀴즈 이어 풀기" : "도착 후 퀴즈 시작");
-        quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
+        quizStatus.setVisibility(showDetails?View.VISIBLE:View.GONE);
         quizButton.setEnabled(quizAllowed);
         if (quiz == null || quizHidden) quizStatus.setText(!quizAllowed ? "P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다."
                 : quizEmptyNotice ? "아직 끝까지 들은 브리핑이 없어 풀 수 있는 퀴즈가 없습니다." : "목적지 도착 확인 · 정차 중 퀴즈 가능");
