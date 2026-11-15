@@ -1,14 +1,25 @@
 package com.routeonomy.app.ui;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.routeonomy.app.R;
+import com.routeonomy.app.domain.PointRules;
 import com.routeonomy.app.domain.QuizQuestion;
 import com.routeonomy.app.domain.QuizSession;
 
@@ -16,65 +27,77 @@ import java.util.List;
 import java.util.function.IntConsumer;
 
 /**
- * Korean Figma quiz screen: app header, intro, answered/total bar, "Q n." card,
- * 2×2 choice cards and the 힌트 / 정답 제출하기 / ? / settings / close row.
+ * Figma "Today's Economic Quiz": app header, title and intro, answered/total bar with the XP on offer,
+ * "Q n." card with a red pen grading mark once answered, one-column choices, hint / result note and
+ * the Need a hint? (Learn why) · Check answer (Next question) · tools · close row.
  * The pending (not yet submitted) choice lives only here; grading stays in [QuizSession].
  */
 final class QuizScreen extends LinearLayout {
-    /** Points shown on the quiz; implemented by the activity over PlayerProgress. */
+    /** XP shown on the quiz; implemented by the activity over PlayerProgress. */
     interface Rewards {
-        /** Pays for the current question's hint (once); false when there are not enough points. */
+        /** Pays for the current question's hint (once); false when there is not enough XP. */
         boolean payHint();
         boolean canShowHint();
         boolean isHintPaid();
-        /** Points given for the answer to the current question (0 on "다시 풀기"). */
+        /** XP given for the answer to the current question (0 on "다시 풀기"). */
         int answerPoints();
-        /** Result screen line, e.g. "이번 퀴즈 +7 포인트 · 🌱 새싹 Lv.2". */
+        /** Result screen line, e.g. "이번 퀴즈 +7 XP · 🌱 새싹 Lv.2". */
         String resultLine();
     }
 
-    private static final int WRONG_FILL = 0xfff7e4df;
-    private static final int WRONG = 0xffb4533f;
+    private static final int PICKED_FILL = 0xffcdf7cf;
+    private static final int PICKED_BADGE = 0xff9bd8a8;
+    private static final int WRONG_FILL = 0xffffcfcf;
+    private static final int WRONG_BADGE = 0xffe58b8b;
+    private static final int WRONG = 0xffd23f31;
+    private static final int HINT_FILL = 0xffeef8cf;
+    private static final int PEN = 0xffe0484a;
 
     private final UiStyle style;
     private final IntConsumer onSubmit;
     private final Runnable onNext;
+    private final Runnable onReview;
     private final TextView intro;
     private final TextView progressLabel;
+    private final TextView xpLabel;
     private final View progressFill;
     private final View progressRest;
+    private final TextView badge;
     private final TextView number;
     private final TextView question;
+    private final GradeMark mark;
     private final LinearLayout choices;
     private final TextView feedback;
-    private final TextView hintButton;
+    private final TextView leftButton;
     private final TextView primary;
     private QuizSession quiz;
     private Rewards rewards;
     private String hint;
     private Integer pending;
-    private String note; // hint or help text kept while the user picks a choice
+    private boolean hintShown;
+    private boolean whyShown;
 
-    QuizScreen(Context context, Runnable onHome, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext) {
+    QuizScreen(Context context, Runnable onClose, Runnable onSettings, IntConsumer onSubmit, Runnable onNext,
+            Runnable onReview) {
         super(context);
         this.onSubmit = onSubmit;
         this.onNext = onNext;
+        this.onReview = onReview;
         style = new UiStyle(context, 1f);
         setOrientation(VERTICAL);
+        setClipChildren(false);
 
         addView(style.appHeader(false), matchWrap(0));
-        TextView home = style.action("← 홈으로", false, onHome);
-        home.setContentDescription("홈 화면으로 가기");
-        LayoutParams homeParams = new LayoutParams(LayoutParams.WRAP_CONTENT, style.size(44));
-        homeParams.topMargin = style.size(12);
-        addView(home, homeParams);
-        intro = style.text("", 19, UiStyle.INK, false);
+        TextView title = style.text("Today’s Economic Quiz", 44, UiStyle.INK, true);
+        title.setGravity(Gravity.CENTER);
+        addView(title, matchWrap(40));
+        intro = style.text("", 18, UiStyle.INK, false);
         intro.setGravity(Gravity.CENTER);
-        intro.setLineSpacing(style.size(4), 1f);
-        addView(intro, matchWrap(12));
+        intro.setLineSpacing(style.size(5), 1f);
+        addView(intro, matchWrap(22));
 
         LinearLayout progress = row();
-        progressLabel = style.text("", 18, UiStyle.MUTED, false);
+        progressLabel = style.text("", 17, UiStyle.MUTED, false);
         progress.addView(progressLabel, style.wrapParams());
         LinearLayout track = new LinearLayout(context);
         track.setBackground(style.shape(UiStyle.NEUTRAL, 8));
@@ -86,14 +109,20 @@ final class QuizScreen extends LinearLayout {
         track.addView(progressRest, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
         LayoutParams trackParams = new LayoutParams(0, style.size(16), 1f);
         trackParams.setMarginStart(style.size(12));
+        trackParams.setMarginEnd(style.size(10));
         progress.addView(track, trackParams);
-        addView(progress, matchWrap(14));
+        xpLabel = style.text("", 17, UiStyle.MUTED, false);
+        progress.addView(xpLabel, style.wrapParams());
+        addView(progress, matchWrap(18));
 
+        // Question card; the grading mark is drawn over its left end like a red pen.
+        FrameLayout cardFrame = new FrameLayout(context);
+        cardFrame.setClipChildren(false);
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(VERTICAL);
-        card.setPadding(style.size(22), style.size(14), style.size(22), style.size(20));
+        card.setPadding(style.size(22), style.size(10), style.size(22), style.size(16));
         style.card(card);
-        TextView badge = style.pill("Today’s learning", UiStyle.GREEN, UiStyle.MINT, 13);
+        badge = style.pill("Today’s learning", UiStyle.GREEN, UiStyle.MINT, 13);
         badge.setPadding(style.size(8), style.size(2), style.size(8), style.size(2));
         LayoutParams badgeParams = style.wrapParams();
         badgeParams.setMarginStart(style.size(46));
@@ -101,46 +130,69 @@ final class QuizScreen extends LinearLayout {
         LinearLayout questionRow = row();
         number = style.text("", 26, UiStyle.SAGE, true);
         questionRow.addView(number, style.wrapParams());
-        question = style.text("", 19, UiStyle.INK, true);
+        question = style.text("", 20, UiStyle.INK, true);
         question.setLineSpacing(style.size(3), 1f);
         LayoutParams questionParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        questionParams.setMarginStart(style.size(8));
+        questionParams.setMarginStart(style.size(10));
         questionRow.addView(question, questionParams);
         card.addView(questionRow, matchWrap(4));
-        addView(card, matchWrap(20));
+        cardFrame.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT));
+        mark = new GradeMark(context);
+        FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(style.size(150), style.size(150),
+                Gravity.START | Gravity.CENTER_VERTICAL);
+        markParams.leftMargin = -style.size(30);
+        cardFrame.addView(mark, markParams);
+        addView(cardFrame, matchWrap(30));
 
         choices = new LinearLayout(context);
         choices.setOrientation(VERTICAL);
-        addView(choices, matchWrap(6));
+        LayoutParams choicesParams = matchWrap(6);
+        choicesParams.setMarginStart(style.size(40));
+        choicesParams.setMarginEnd(style.size(26));
+        addView(choices, choicesParams);
 
         feedback = style.text("", 17, UiStyle.INK, false);
         feedback.setLineSpacing(style.size(4), 1f);
-        feedback.setPadding(style.size(20), style.size(14), style.size(20), style.size(14));
+        feedback.setPadding(style.size(20), style.size(12), style.size(20), style.size(12));
         feedback.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
-        addView(feedback, matchWrap(18));
+        LayoutParams feedbackParams = matchWrap(22);
+        feedbackParams.setMarginStart(style.size(24));
+        feedbackParams.setMarginEnd(style.size(26));
+        addView(feedback, feedbackParams);
+
+        // Pushes the buttons to the bottom when the screen is taller than the content.
+        addView(new View(context), new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout actions = row();
-        hintButton = style.action("힌트 확인하기", false, this::showHint);
-        actions.addView(hintButton, new LayoutParams(0, style.size(50), 1f));
+        leftButton = style.action("Need a hint?", false, this::onLeft);
+        leftButton.setTextSize(22);
+        actions.addView(leftButton, new LayoutParams(0, style.size(56), 1f));
         primary = style.action("", true, this::onPrimary);
-        LayoutParams primaryParams = new LayoutParams(0, style.size(50), 1.4f);
+        primary.setTextSize(22);
+        LayoutParams primaryParams = new LayoutParams(0, style.size(56), 1.75f);
         primaryParams.setMarginStart(style.size(12));
         actions.addView(primary, primaryParams);
-        addIcon(actions, glyph("?"), "퀴즈 사용법", this::showHelp);
         addIcon(actions, style.picture(R.drawable.pre_drive_settings), "시뮬레이션 설정", onSettings);
-        addIcon(actions, gridIcon(), "퀴즈 닫고 브리핑 화면으로", onClose);
+        addIcon(actions, gridIcon(), "퀴즈 닫기", onClose);
         addView(actions, matchWrap(24));
     }
 
     /** Called when the quiz object, question or answer changed; drops any unsubmitted selection. */
     void bind(QuizSession quiz, String hintText, Rewards rewards) {
+        boolean sameQuestion = quiz == this.quiz && this.quiz != null && quiz.position() == shownPosition;
         this.quiz = quiz;
         this.rewards = rewards;
         this.hint = hintText;
         pending = null;
-        note = null;
+        if (!sameQuestion) hintShown = false;
+        whyShown = quiz.isAnswered() && quiz.current() != null
+                && quiz.selectedChoice() != quiz.current().getAnswerIndex(); // a wrong answer explains itself
+        shownPosition = quiz.position();
         refresh();
     }
+
+    private int shownPosition = -1;
 
     private void refresh() {
         int total = quiz.total();
@@ -148,6 +200,8 @@ final class QuizScreen extends LinearLayout {
         int done = finished ? total : quiz.position() + (quiz.isAnswered() ? 1 : 0);
         intro.setText("오늘 출근길에 배운 내용을 기억하고 있나요?\n" + total + "개의 질문으로 오늘의 경제 지식을 확인해 보세요.");
         progressLabel.setText(done + " / " + total);
+        xpLabel.setText("+ " + total * PointRules.QUIZ_CORRECT + "XP");
+        xpLabel.setContentDescription("모두 맞히면 " + total * PointRules.QUIZ_CORRECT + " XP");
         float share = total == 0 ? 0f : (float) done / total;
         ((LayoutParams) progressFill.getLayoutParams()).weight = share;
         ((LayoutParams) progressRest.getLayoutParams()).weight = 1f - share;
@@ -155,53 +209,53 @@ final class QuizScreen extends LinearLayout {
         choices.removeAllViews();
 
         if (finished) {
+            badge.setVisibility(VISIBLE);
             number.setText("");
             question.setText("퀴즈 결과 · " + total + "문제 중 " + quiz.score() + "개 정답");
-            showFeedback((quiz.score() == total ? "모두 맞혔어요! 오늘 브리핑을 잘 기억하고 계시네요."
-                    : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.") + "\n" + rewards.resultLine(), quiz.score() == total);
-            hintButton.setVisibility(INVISIBLE);
+            mark.show(quiz.score() == total ? GradeMark.CORRECT : GradeMark.NONE);
+            boolean perfect = quiz.score() == total;
+            showNote(perfect ? "● 모두 맞혔어요!" : "● 수고했어요!", UiStyle.GREEN,
+                    (perfect ? "오늘 브리핑을 잘 기억하고 계시네요." : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.")
+                            + "\n" + rewards.resultLine(), UiStyle.MINT);
+            setLeft("오늘의 정리", UiStyle.MUTED, true);
             setPrimary("다시 풀기", true);
             return;
         }
         QuizQuestion current = quiz.current();
+        badge.setVisibility(quiz.position() == 0 ? VISIBLE : GONE);
         number.setText("Q" + (quiz.position() + 1) + ".");
         question.setText(current.getQuestion());
         Integer selected = quiz.selectedChoice();
         List<String> options = current.getChoices();
-        int cells = options.size() + options.size() % 2;
-        LinearLayout line = null;
-        for (int i = 0; i < cells; i++) {
-            if (i % 2 == 0) {
-                line = row();
-                line.setBaselineAligned(false);
-                choices.addView(line, matchWrap(14));
-            }
-            boolean filler = i >= options.size();
-            View cell = filler ? new View(getContext())
-                    : choiceCard(i, options.get(i), current.getAnswerIndex(), selected);
-            // Cards match the row height; the empty D slot must not (a plain View given MATCH_PARENT
-            // inside a ScrollView takes the whole remaining height and pushes the buttons off screen).
-            LayoutParams params = new LayoutParams(0, filler ? 0 : LayoutParams.MATCH_PARENT, 1f);
-            if (i % 2 == 1) params.setMarginStart(style.size(22));
-            line.addView(cell, params);
+        for (int i = 0; i < options.size(); i++) {
+            choices.addView(choiceCard(i, options.get(i), current.getAnswerIndex(), selected), matchWrap(i == 0 ? 0 : 18));
         }
 
-        hintButton.setVisibility(selected == null && hint != null && !hint.isEmpty() ? VISIBLE : INVISIBLE);
-        boolean hintAvailable = rewards.canShowHint();
-        hintButton.setText(rewards.isHintPaid() ? "힌트 다시 보기" : hintAvailable ? "힌트 확인하기 · 1P" : "힌트 · 포인트 부족");
-        hintButton.setEnabled(hintAvailable);
-        hintButton.setAlpha(hintAvailable ? 1f : 0.45f);
         if (selected == null) {
-            if (note == null) feedback.setVisibility(GONE);
-            else showFeedback(note, true);
-            setPrimary("정답 제출하기", pending != null);
+            mark.show(GradeMark.NONE);
+            boolean paid = rewards.isHintPaid();
+            boolean hintAvailable = hint != null && !hint.isEmpty() && rewards.canShowHint();
+            setLeft(hintAvailable ? "Need a hint?" : "Hint · XP 부족", UiStyle.GREEN, hintAvailable);
+            leftButton.setContentDescription(paid ? "힌트 다시 보기" : hintAvailable ? "힌트 보기, 1 XP 사용" : "XP가 부족해 힌트를 볼 수 없어요");
+            if (hintShown && paid) showNote("💡 Hint", UiStyle.INK, hint, HINT_FILL);
+            else feedback.setVisibility(GONE);
+            setPrimary("Check answer", pending != null);
         } else {
             boolean correct = selected == current.getAnswerIndex();
+            mark.show(correct ? GradeMark.CORRECT : GradeMark.WRONG);
             int points = rewards.answerPoints();
-            showFeedback((correct ? "정답입니다!" : "아쉬워요. 정답은 " + letter(current.getAnswerIndex()) + "입니다.")
-                    + (points > 0 ? " +" + points + " 포인트" : "")
-                    + "\n" + current.getExplanation(), correct);
-            setPrimary(quiz.position() + 1 < total ? "다음 문제" : "결과 보기", true);
+            String earned = points > 0 ? "   +" + points + " XP" : "";
+            if (correct) {
+                showNote("● 정답이에요!" + earned, UiStyle.GREEN, whyShown ? current.getExplanation() : null,
+                        whyShown ? UiStyle.MINT : Color.TRANSPARENT);
+            } else {
+                showNote("▲ Almost there !" + earned, WRONG, "정답은 " + letter(current.getAnswerIndex()) + "예요. "
+                        + current.getExplanation(), Color.TRANSPARENT);
+                if (!whyShown) feedback.setVisibility(GONE);
+            }
+            setLeft("Learn why", correct ? UiStyle.MUTED : WRONG, true);
+            leftButton.setContentDescription(whyShown ? "해설 숨기기" : "해설 보기");
+            setPrimary(quiz.position() + 1 < total ? "Next question" : "결과 보기", true);
         }
     }
 
@@ -210,25 +264,21 @@ final class QuizScreen extends LinearLayout {
         boolean isAnswer = checked && index == answer;
         boolean isWrongPick = checked && index == selected && index != answer;
         boolean isPending = !checked && pending != null && pending == index;
+        boolean green = isAnswer || isPending;
 
         LinearLayout card = row();
-        card.setPadding(style.size(16), style.size(14), style.size(16), style.size(14));
-        card.setMinimumHeight(style.size(66));
-        GradientDrawable background = style.shape(isAnswer || isPending ? UiStyle.MINT
-                : isWrongPick ? WRONG_FILL : Color.WHITE, 12);
-        if (isAnswer || isPending) background.setStroke(style.size(2), UiStyle.GREEN);
-        else if (isWrongPick) background.setStroke(style.size(2), WRONG);
-        card.setBackground(background);
-        card.setElevation(style.size(3));
-        if (checked && !isAnswer && !isWrongPick) card.setAlpha(0.6f);
+        card.setPadding(style.size(16), style.size(12), style.size(16), style.size(12));
+        card.setMinimumHeight(style.size(70));
+        card.setBackground(style.shape(green ? PICKED_FILL : isWrongPick ? WRONG_FILL : Color.WHITE, 12));
+        card.setElevation(style.size(green || isWrongPick ? 6 : 3));
+        if (checked && !isAnswer && !isWrongPick) card.setAlpha(0.7f);
 
-        String mark = isAnswer ? "✓" : isWrongPick ? "✗" : letter(index);
-        TextView badge = style.text(mark, 19, isWrongPick ? WRONG : UiStyle.MUTED, false);
-        badge.setGravity(Gravity.CENTER);
-        badge.setBackground(style.shape(isAnswer || isPending ? Color.WHITE : UiStyle.NEUTRAL, 18));
-        badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        card.addView(badge, new LayoutParams(style.size(36), style.size(36)));
-        TextView text = style.text(label, 17, UiStyle.INK, false);
+        TextView letterBadge = style.text(letter(index), 20, isWrongPick ? Color.WHITE : green ? UiStyle.GREEN : UiStyle.MUTED, false);
+        letterBadge.setGravity(Gravity.CENTER);
+        letterBadge.setBackground(style.shape(green ? PICKED_BADGE : isWrongPick ? WRONG_BADGE : UiStyle.NEUTRAL, 20));
+        letterBadge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        card.addView(letterBadge, new LayoutParams(style.size(40), style.size(40)));
+        TextView text = style.text(label, 18, UiStyle.INK, false);
         text.setLineSpacing(style.size(3), 1f);
         LayoutParams textParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         textParams.setMarginStart(style.size(14));
@@ -254,24 +304,41 @@ final class QuizScreen extends LinearLayout {
         }
     }
 
-    private void showHint() {
-        if (hint == null || hint.isEmpty() || quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
-        if (!rewards.payHint()) return;
-        note = "힌트 · " + hint;
-        refresh(); // shows the note and the paid hint label
+    /** Need a hint? (pays once, then shows it again for free) · Learn why (toggles the explanation) · 오늘의 정리. */
+    private void onLeft() {
+        if (quiz == null) return;
+        if (quiz.isFinished()) {
+            onReview.run();
+            return;
+        }
+        if (quiz.isAnswered()) {
+            whyShown = !whyShown;
+            refresh();
+            return;
+        }
+        if (hint == null || hint.isEmpty()) return;
+        if (!rewards.isHintPaid() && !rewards.payHint()) return;
+        hintShown = true;
+        refresh(); // shows the hint; the activity rebinds after the XP change and keeps it shown
     }
 
-    private void showHelp() {
-        if (quiz == null || quiz.isFinished()) return;
-        if (quiz.isAnswered()) return; // keep the explanation visible
-        note = "선택지를 하나 고른 뒤 '정답 제출하기'를 누르세요. 막히면 '힌트 확인하기'(1포인트)로 새 용어를 볼 수 있어요. 정답 3포인트, 오답 1포인트.";
-        showFeedback(note, true);
-    }
-
-    private void showFeedback(String message, boolean good) {
-        feedback.setText(message);
-        feedback.setBackground(style.shape(good ? UiStyle.MINT : WRONG_FILL, 14));
+    /** Bold coloured heading line and an optional body, on an optional tinted box. */
+    private void showNote(String heading, int headingColor, String body, int fill) {
+        SpannableStringBuilder text = new SpannableStringBuilder(heading);
+        text.setSpan(new StyleSpan(Typeface.BOLD), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new ForegroundColorSpan(headingColor), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (body != null && !body.isEmpty()) text.append("\n").append(body);
+        feedback.setText(text);
+        feedback.setBackground(fill == Color.TRANSPARENT ? null : style.shape(fill, 12));
         feedback.setVisibility(VISIBLE);
+    }
+
+    private void setLeft(String label, int color, boolean enabled) {
+        leftButton.setText(label);
+        leftButton.setTextColor(color);
+        leftButton.setEnabled(enabled);
+        leftButton.setAlpha(enabled ? 1f : 0.5f);
+        leftButton.setContentDescription(null);
     }
 
     private void setPrimary(String label, boolean enabled) {
@@ -281,21 +348,14 @@ final class QuizScreen extends LinearLayout {
     }
 
     private void addIcon(LinearLayout row, View icon, String label, Runnable click) {
-        View button = style.iconButton(icon, 26, label, click);
-        LayoutParams params = new LayoutParams(style.size(50), style.size(50));
-        params.setMarginStart(style.size(12));
+        View button = style.iconButton(icon, 28, label, click);
+        LayoutParams params = new LayoutParams(style.size(56), style.size(56));
+        params.setMarginStart(style.size(10));
         row.addView(button, params);
     }
 
-    private TextView glyph(String value) {
-        TextView glyph = style.text(value, 20, UiStyle.MUTED, true);
-        glyph.setGravity(Gravity.CENTER);
-        glyph.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        return glyph;
-    }
-
     private View gridIcon() {
-        android.widget.FrameLayout grid = new android.widget.FrameLayout(getContext());
+        FrameLayout grid = new FrameLayout(getContext());
         grid.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         for (int r = 0; r < 2; r++) {
             for (int c = 0; c < 2; c++) {
@@ -303,10 +363,9 @@ final class QuizScreen extends LinearLayout {
                 GradientDrawable outline = style.shape(Color.TRANSPARENT, 1);
                 outline.setStroke(Math.max(1, style.size(2)), UiStyle.MUTED);
                 cell.setBackground(outline);
-                android.widget.FrameLayout.LayoutParams params =
-                        new android.widget.FrameLayout.LayoutParams(style.size(10), style.size(10));
-                params.topMargin = style.size(2 + r * 13);
-                params.leftMargin = style.size(2 + c * 13);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(style.size(11), style.size(11));
+                params.topMargin = style.size(2 + r * 14);
+                params.leftMargin = style.size(2 + c * 14);
                 grid.addView(cell, params);
             }
         }
@@ -327,5 +386,65 @@ final class QuizScreen extends LinearLayout {
         LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         params.topMargin = style.size(top);
         return params;
+    }
+
+    /** Hand-drawn red pen mark: a loose circle for a right answer, a scribbled star for a wrong one. */
+    private static final class GradeMark extends View {
+        static final int NONE = 0, CORRECT = 1, WRONG = 2;
+        private final Paint pen = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path path = new Path();
+        private final RectF oval = new RectF();
+        private final RectF tail = new RectF();
+        private int kind = NONE;
+
+        GradeMark(Context context) {
+            super(context);
+            pen.setStyle(Paint.Style.STROKE);
+            pen.setStrokeCap(Paint.Cap.ROUND);
+            pen.setStrokeJoin(Paint.Join.ROUND);
+            pen.setColor(PEN);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setVisibility(GONE);
+        }
+
+        void show(int kind) {
+            if (this.kind == kind) return;
+            this.kind = kind;
+            setVisibility(kind == NONE ? GONE : VISIBLE);
+            if (kind != NONE) {
+                setScaleX(0.6f);
+                setScaleY(0.6f);
+                setAlpha(0f);
+                animate().scaleX(1f).scaleY(1f).alpha(0.9f).setDuration(220).start();
+            }
+            invalidate();
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            float w = getWidth(), h = getHeight();
+            pen.setStrokeWidth(Math.max(4f, w / 26f));
+            path.reset();
+            if (kind == CORRECT) {
+                // A bit more than a full turn, slightly tilted, so the ends overlap like a pen stroke.
+                canvas.save();
+                canvas.rotate(-18f, w / 2f, h / 2f);
+                oval.set(w * 0.12f, h * 0.2f, w * 0.88f, h * 0.8f);
+                tail.set(oval.left + w * 0.02f, oval.top - h * 0.03f, oval.right + w * 0.02f, oval.bottom - h * 0.03f);
+                path.addArc(oval, 200f, 345f);
+                path.arcTo(tail, 185f, 40f, false);
+                canvas.drawPath(path, pen);
+                canvas.restore();
+            } else if (kind == WRONG) {
+                // Five-point star drawn in one stroke.
+                double cx = w / 2.0, cy = h / 2.0, r = Math.min(w, h) * 0.42;
+                for (int i = 0; i <= 5; i++) {
+                    double angle = Math.toRadians(-90 + i * 144);
+                    float x = (float) (cx + r * Math.cos(angle)), y = (float) (cy + r * Math.sin(angle));
+                    if (i == 0) path.moveTo(x, y);
+                    else path.lineTo(x, y);
+                }
+                canvas.drawPath(path, pen);
+            }
+        }
     }
 }

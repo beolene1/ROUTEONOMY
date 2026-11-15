@@ -194,7 +194,7 @@ final class NowPlayingCard extends LinearLayout {
         progressFill.requestLayout();
     }
 
-    /** e.g. "🌱 새싹 Lv.2" and "다음 단계까지 45P · 보유 120P". */
+    /** e.g. "🌱 새싹 Lv.2" and "다음 단계까지 45XP · 보유 120XP". */
     void setLevel(String label, String detail) {
         if (!label.contentEquals(levelLabel.getText())) levelLabel.setText(label);
         if (!detail.contentEquals(levelDetail.getText())) levelDetail.setText(detail);
