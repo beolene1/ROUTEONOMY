@@ -143,20 +143,23 @@ final class QuizScreen extends LinearLayout {
         cardFrame.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT));
         mark = new GradeMark(context);
+        // The mark is taller than the card; negative top/bottom margins keep it out of the frame height,
+        // so the spacing around the card does not depend on it. It sits a little above the card's centre.
         FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(style.size(190), style.size(200),
-                Gravity.START | Gravity.CENTER_VERTICAL);
+                Gravity.START | Gravity.TOP);
         markParams.leftMargin = -style.size(44);
+        markParams.topMargin = -style.size(72);
+        markParams.bottomMargin = -style.size(28);
 
         // Top layer: above the card (elevation 3) and the choice cards below it, never clipped.
         mark.view.setElevation(style.size(24));
-        mark.view.setTranslationY(-style.size(20)); // a little above the card's centre, as in Figma
         cardFrame.addView(mark.view, markParams);
         cardFrame.setTranslationZ(style.size(24));
-        addView(cardFrame, matchWrap(12));
+        addView(cardFrame, matchWrap(44));
 
         choices = new LinearLayout(context);
         choices.setOrientation(VERTICAL);
-        LayoutParams choicesParams = matchWrap(-18); // the mark frame is taller than the card
+        LayoutParams choicesParams = matchWrap(40);
         choicesParams.setMarginStart(style.size(49));
         choicesParams.setMarginEnd(style.size(29));
         addView(choices, choicesParams);
@@ -234,7 +237,8 @@ final class QuizScreen extends LinearLayout {
         if (finished) {
             badge.setVisibility(VISIBLE);
             number.setText("");
-            question.setText("퀴즈 결과 · " + total + "문제 중 " + quiz.score() + "개 정답");
+            question.setText("퀴즈 결과\n" + total + "문제 중 " + quiz.score() + "개 정답");
+            question.setTextSize(28); // bigger result card, closer to the note below
             mark.show(quiz.score() == total ? GradeMark.CORRECT : GradeMark.NONE);
             boolean perfect = quiz.score() == total;
             showNote(perfect ? "● 모두 맞혔어요!" : "● 수고했어요!", UiStyle.GREEN,
@@ -247,11 +251,12 @@ final class QuizScreen extends LinearLayout {
         QuizQuestion current = quiz.current();
         badge.setVisibility(quiz.position() == 0 ? VISIBLE : GONE);
         number.setText("Q" + (quiz.position() + 1) + ".");
+        question.setTextSize(22);
         question.setText(current.getQuestion());
         Integer selected = quiz.selectedChoice();
         List<String> options = current.getChoices();
         for (int i = 0; i < options.size(); i++) {
-            choices.addView(choiceCard(i, options.get(i), current.getAnswerIndex(), selected), matchWrap(i == 0 ? 0 : 26));
+            choices.addView(choiceCard(i, options.get(i), current.getAnswerIndex(), selected), matchWrap(i == 0 ? 0 : 36));
         }
 
         if (selected == null) {
@@ -351,6 +356,7 @@ final class QuizScreen extends LinearLayout {
         SpannableStringBuilder text = new SpannableStringBuilder(heading);
         text.setSpan(new StyleSpan(Typeface.BOLD), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         text.setSpan(new ForegroundColorSpan(headingColor), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        text.setSpan(new android.text.style.RelativeSizeSpan(1.25f), 0, heading.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         if (body != null && !body.isEmpty()) text.append("\n").append(body);
         feedback.setText(text);
         feedback.setBackground(fill == Color.TRANSPARENT ? null : style.shape(fill, 12));

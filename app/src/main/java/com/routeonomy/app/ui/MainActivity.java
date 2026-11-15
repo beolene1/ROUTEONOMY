@@ -97,6 +97,9 @@ public final class MainActivity extends Activity {
     private ScrollView arrivalScroll;
     private boolean arrivalHidden; // grid / tools on the arrival screen show the briefing screen instead
     private ChoicePopup choicePopup;
+    private TextView appToast;
+    private final Runnable hideAppToast = () -> appToast.animate().alpha(0f).setDuration(300)
+            .withEndAction(() -> appToast.setVisibility(View.GONE)).start();
     private boolean topicChoiceOpen; // which use of choicePopup is showing: topic choice (home) or review (arrival/quiz)
     private PrefsReviewStore reviewStore;
     private ConfirmPopup homeConfirm;
@@ -252,6 +255,18 @@ public final class MainActivity extends Activity {
         appArea.addView(arrivalScroll, new FrameLayout.LayoutParams(-1, -1));
         choicePopup = new ChoicePopup(this);
         appArea.addView(choicePopup, new FrameLayout.LayoutParams(-1, -1));
+        // In-app toast (the system toast is easy to miss on the car screen).
+        appToast = style.text("", 22, android.graphics.Color.WHITE, true);
+        appToast.setGravity(android.view.Gravity.CENTER);
+        appToast.setPadding(style.size(32), style.size(18), style.size(32), style.size(18));
+        appToast.setBackground(style.shape(0xe6256a49, 32));
+        appToast.setElevation(style.size(12));
+        appToast.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        appToast.setVisibility(View.GONE);
+        FrameLayout.LayoutParams toastParams = new FrameLayout.LayoutParams(-2, -2,
+                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+        toastParams.bottomMargin = style.size(140);
+        appArea.addView(appToast, toastParams);
         homeConfirm = new ConfirmPopup(this, "홈 화면으로 갈까요?",
                 "홈 화면으로 가면 음성 재생이 멈춥니다.\n그래도 홈으로 가시겠습니까?", "뒤로가기");
         appArea.addView(homeConfirm, new FrameLayout.LayoutParams(-1, -1));
@@ -640,12 +655,23 @@ public final class MainActivity extends Activity {
                     @Override public void onPrimary(int selected) {
                         reviewStore.save(com.routeonomy.app.domain.LessonReview.values()[selected]);
                         choicePopup.hide();
-                        android.widget.Toast.makeText(MainActivity.this, "의견을 저장했어요. 고마워요!", android.widget.Toast.LENGTH_SHORT).show();
+                        showAppToast("✓  오늘의 리뷰가 저장되었어요. 고마워요!");
                         updateBackCallback();
                     }
                     @Override public void onSecondary() { choicePopup.hide(); updateBackCallback(); }
                 });
         updateBackCallback();
+    }
+
+    /** Short message over the app column that fades out by itself. */
+    private void showAppToast(String message) {
+        appToast.removeCallbacks(hideAppToast);
+        appToast.animate().cancel();
+        appToast.setText(message);
+        appToast.setAlpha(0f);
+        appToast.setVisibility(View.VISIBLE);
+        appToast.animate().alpha(1f).setDuration(200).start();
+        appToast.postDelayed(hideAppToast, 2500);
     }
 
     private CharSequence reviewRow(String emoji, String label, String promise) {

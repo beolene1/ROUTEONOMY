@@ -50,7 +50,7 @@ final class ChoicePopup extends FrameLayout {
         card.setBackground(style.shape(0xc8f7f7f2, 20)); // semi-transparent, as in Figma
         card.setElevation(style.size(10));
 
-        title = style.text("", 34, UiStyle.INK, false);
+        title = style.text("", 34, UiStyle.INK, true);
         title.setGravity(Gravity.CENTER);
         card.addView(title, style.wrapParams());
         rows = new LinearLayout(context);
