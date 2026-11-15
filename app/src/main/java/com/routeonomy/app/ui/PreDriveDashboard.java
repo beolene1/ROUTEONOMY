@@ -12,6 +12,12 @@ import android.widget.TextView;
 
 import com.routeonomy.app.R;
 import com.routeonomy.app.domain.BriefingSegment;
+import com.routeonomy.app.domain.IndicatorKind;
+import com.routeonomy.app.domain.IndicatorText;
+import com.routeonomy.app.domain.MarketIndicator;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 
 final class PreDriveDashboard extends LinearLayout {
@@ -40,6 +46,7 @@ final class PreDriveDashboard extends LinearLayout {
     private final TextView indexCaption;
     private String boundIndex;
     private Boolean boundRising;
+    private final Map<IndicatorKind, IndicatorCard> indicatorCards = new EnumMap<>(IndicatorKind.class);
     private final Runnable onNext;
     private final Runnable onPrevious;
     private boolean canChangeTopic;
@@ -59,7 +66,7 @@ final class PreDriveDashboard extends LinearLayout {
 
         addView(header(), rowParams(0));
         addView(greeting(), rowParams(36));
-        addView(sectionTitle("OVER NIGHT MARKET SUMMARY", "밤사이 글로벌 시장의 주요 흐름을 확인해 보세요."), rowParams(40));
+        addView(sectionTitle("LATEST ECONOMIC INDICATORS", "최근 공개 경제지표예요. 지표마다 발표 주기가 달라 기준일을 함께 보여 드려요."), rowParams(40));
         addMarketRows();
 
         // Topic heading and linked index card on the left, the study mascot with its speech bubble on the right.
@@ -156,7 +163,7 @@ final class PreDriveDashboard extends LinearLayout {
         indexSlot.removeAllViews();
         indexSlot.setVisibility(symbol == null ? GONE : VISIBLE);
         if (symbol == null) return;
-        addMarketCard(indexSlot, symbol, rising);
+        addExampleIndexCard(indexSlot, symbol, rising);
         // Same width as one market card: the rest of the row stays empty.
         LayoutParams params = (LayoutParams) indexSlot.getChildAt(0).getLayoutParams();
         params.width = 0;
@@ -267,18 +274,85 @@ final class PreDriveDashboard extends LinearLayout {
 
     private void addMarketRows() {
         LinearLayout market = row();
-        addMarketCard(market, "S&P 500", true);
-        addMarketCard(market, "NASDAQ", false);
+        addIndicatorCard(market, IndicatorKind.USD_KRW);
+        addIndicatorCard(market, IndicatorKind.US_10Y);
         if (narrow) {
             addView(market, rowParams(24));
             market = row();
         }
-        addMarketCard(market, "USD/KRW", true);
+        addIndicatorCard(market, IndicatorKind.US_PPI);
         if (narrow) market.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
         addView(market, rowParams(narrow ? 16 : 24));
     }
 
-    private void addMarketCard(LinearLayout market, String symbol, boolean rising) {
+    /** One home indicator card; filled by {@link #bindIndicator} once a lookup (or the saved value) arrives. */
+    private final class IndicatorCard {
+        final LinearLayout root = column();
+        final ImageView circle = picture(R.drawable.pre_drive_gain_circle);
+        final ImageView arrow = picture(R.drawable.pre_drive_gain_arrow);
+        final FrameLayout movement = new FrameLayout(getContext());
+        final TextView value = text("…", 26, INK, false);
+        final TextView detail = text("불러오는 중", 16, MUTED, false);
+        final SparklineView chart = new SparklineView(getContext(), size(2.5f));
+
+        IndicatorCard(IndicatorKind kind) {
+            root.setPadding(size(18), size(16), size(18), size(14));
+            styleCard(root);
+            TextView title = text(kind.getTitle(), 20, INK, true);
+            title.setMaxLines(1);
+            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            root.addView(title);
+
+            LinearLayout valueRow = row();
+            place(movement, circle, 31, 31, Gravity.CENTER);
+            place(movement, arrow, 15, 14, Gravity.CENTER);
+            movement.setVisibility(INVISIBLE);
+            valueRow.addView(movement, new LayoutParams(size(31), size(31)));
+            value.setMaxLines(1);
+            LayoutParams valueParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+            valueParams.setMarginStart(size(6));
+            valueRow.addView(value, valueParams);
+            valueRow.addView(chart, new LayoutParams(size(narrow ? 64 : 80), size(40)));
+            root.addView(valueRow, rowParams(8));
+
+            detail.setMaxLines(1);
+            detail.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            root.addView(detail, rowParams(6));
+            root.addView(text(kind.getSource(), 14, MUTED, false), rowParams(2));
+            root.setContentDescription(kind.getTitle() + " 불러오는 중");
+        }
+
+        void bind(MarketIndicator indicator) {
+            boolean has = indicator.getLatest() != null;
+            boolean rising = indicator.getRising();
+            value.setText(IndicatorText.INSTANCE.value(indicator));
+            value.setTextColor(has ? INK : MUTED);
+            detail.setText(has ? IndicatorText.INSTANCE.detail(indicator) : "네트워크 연결 후 다시 열어 주세요");
+            movement.setVisibility(has ? VISIBLE : INVISIBLE);
+            circle.setImageResource(rising ? R.drawable.pre_drive_gain_circle : R.drawable.pre_drive_loss_circle);
+            arrow.setImageResource(rising ? R.drawable.pre_drive_gain_arrow : R.drawable.pre_drive_loss_arrow);
+            arrow.setScaleY(rising ? 1 : -1);
+            chart.setPoints(indicator.getPoints(), rising);
+            root.setContentDescription(IndicatorText.INSTANCE.spoken(indicator));
+        }
+    }
+
+    private void addIndicatorCard(LinearLayout market, IndicatorKind kind) {
+        IndicatorCard card = new IndicatorCard(kind);
+        indicatorCards.put(kind, card);
+        LayoutParams params = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+        if (market.getChildCount() > 0) params.setMarginStart(size(narrow ? 20 : 34));
+        market.addView(card.root, params);
+    }
+
+    /** Shows a lookup result (fresh, saved, or empty) on its home card. */
+    void bindIndicator(MarketIndicator indicator) {
+        IndicatorCard card = indicatorCards.get(indicator.getKind());
+        if (card != null) card.bind(indicator);
+    }
+
+    /** Linked index card with an example value (removed once topic indicators are connected). */
+    private void addExampleIndexCard(LinearLayout market, String symbol, boolean rising) {
         LinearLayout card = column();
         card.setPadding(size(18), size(16), size(18), size(14));
         styleCard(card);

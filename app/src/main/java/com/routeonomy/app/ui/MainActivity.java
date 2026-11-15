@@ -15,6 +15,7 @@ import java.util.Locale;
 import com.routeonomy.app.data.AssetQuizRepository;
 import com.routeonomy.app.data.AssetRouteRepository;
 import com.routeonomy.app.data.AssetSegmentRepository;
+import com.routeonomy.app.data.IndicatorRepository;
 import com.routeonomy.app.data.PrefsProgressStore;
 import com.routeonomy.app.data.PrefsReviewStore;
 import com.routeonomy.app.domain.BriefingSegment;
@@ -22,6 +23,8 @@ import com.routeonomy.app.domain.BriefingSession;
 import com.routeonomy.app.domain.DriveSession;
 import com.routeonomy.app.domain.GeoPoint;
 import com.routeonomy.app.domain.Geofence;
+import com.routeonomy.app.domain.IndicatorKind;
+import com.routeonomy.app.domain.MarketIndicator;
 import com.routeonomy.app.domain.GeofenceGate;
 import com.routeonomy.app.domain.Place;
 import com.routeonomy.app.domain.PlayerProgress;
@@ -105,6 +108,9 @@ public final class MainActivity extends Activity {
             .withEndAction(() -> appToast.setVisibility(View.GONE)).start();
     private boolean topicChoiceOpen; // which use of choicePopup is showing: topic choice (home) or review (arrival/quiz)
     private PrefsReviewStore reviewStore;
+    // Home indicator cards: the latest result per kind, re-applied when the dashboard is rebuilt.
+    private IndicatorRepository indicatorRepository;
+    private final java.util.Map<IndicatorKind, MarketIndicator> indicators = new java.util.EnumMap<>(IndicatorKind.class);
     private ConfirmPopup homeConfirm;
     // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
     private boolean homeShown;
@@ -166,6 +172,7 @@ public final class MainActivity extends Activity {
         });
         buildUi();
         render();
+        loadIndicators();
         speaker.initialize();
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!ttsReady && ttsProblem == null) {
@@ -285,6 +292,7 @@ public final class MainActivity extends Activity {
     }
 
     private static final int WIDE_WINDOW_DP = 1200;
+    private static final List<IndicatorKind> CONNECTED_INDICATORS = java.util.Arrays.asList(IndicatorKind.USD_KRW);
     private static final float MAP_SHARE = 0.43f; // Figma: 722 of the 1682 dp frame
     /** Full window: route panel left, app right. Narrower (e.g. half split): route panel on top. */
     private void applyLayout() {
@@ -309,7 +317,26 @@ public final class MainActivity extends Activity {
                 () -> shiftDashboardTopic(1), () -> shiftDashboardTopic(-1), this::openTopicChoice,
                 () -> openTools(true), () -> openTools(false));
         dashboardScroll.addView(dashboard);
+        for (MarketIndicator indicator : indicators.values()) dashboard.bindIndicator(indicator);
         if (!ttsReady && ttsProblem != null) dashboard.showStatus(ttsProblem); // keep a TTS failure notice
+    }
+
+    /** Shows saved values right away, then looks up the latest ones in the background (briefing does not wait). */
+    private void loadIndicators() {
+        indicatorRepository = new IndicatorRepository(this);
+        for (IndicatorKind kind : CONNECTED_INDICATORS) {
+            MarketIndicator saved = indicatorRepository.cached(kind);
+            if (saved.getLatest() != null) showIndicator(saved);
+        }
+        indicatorRepository.refresh(CONNECTED_INDICATORS, indicator -> {
+            showIndicator(indicator);
+            return kotlin.Unit.INSTANCE;
+        });
+    }
+
+    private void showIndicator(MarketIndicator indicator) {
+        indicators.put(indicator.getKind(), indicator);
+        dashboard.bindIndicator(indicator);
     }
 
     private void toggleSimulationFromCard() {
@@ -883,5 +910,5 @@ public final class MainActivity extends Activity {
         applyLayout();
         render();
     }
-    @Override protected void onDestroy(){if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
+    @Override protected void onDestroy(){if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
 }
