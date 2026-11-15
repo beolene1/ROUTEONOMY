@@ -81,6 +81,7 @@ public final class MainActivity extends Activity {
     private RouteMapView routeMap;
     private LinearLayout screen;
     private FrameLayout appArea;
+    private FigmaFrame appFrame; // scales the app column to the Figma proportions
     private int dashboardWidthDp = -1;
     private boolean simulationOpen;
     private LinearLayout demoMovePanel;
@@ -186,10 +187,10 @@ public final class MainActivity extends Activity {
         briefingScroll = new ScrollView(this);
         briefingScroll.setFillViewport(true);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
+        root.setPadding(style.size(40),style.size(41),style.size(40),style.size(48)); // Figma dp root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
         nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
                 this::previousTopic, this::nextTopic, this::toggleSimulationFromCard, this::toggleDetails);
-        root.addView(nowPlaying, full());
+        root.addView(nowPlaying, new LinearLayout.LayoutParams(-1, 0, 1f)); // fills the column: buttons at the bottom
         playbackStatus = nowPlaying.playbackStatusView();
         // P only: script, discoveries, quiz entry and tools below the Now Playing card.
         details=infoCard(style); discoveries=infoCard(style);
@@ -223,7 +224,7 @@ public final class MainActivity extends Activity {
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
         quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext, this::openReview);
-        quizScreen.setPadding(style.size(28), style.size(24), style.size(28), style.size(24));
+        quizScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         quizScroll = new ScrollView(this);
         quizScroll.setFillViewport(true);
         quizScroll.setBackgroundColor(UiStyle.BACKGROUND);
@@ -238,7 +239,7 @@ public final class MainActivity extends Activity {
         appArea.addView(quizScroll, new FrameLayout.LayoutParams(-1, -1));
         arrivalScreen = new ArrivalScreen(this, this::openReview, this::startQuiz, this::openSimulationFromArrival,
                 this::showDetailsFromArrival);
-        arrivalScreen.setPadding(style.size(28), style.size(24), style.size(28), style.size(24));
+        arrivalScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         arrivalScroll = new ScrollView(this);
         arrivalScroll.setFillViewport(true);
         arrivalScroll.setBackgroundColor(UiStyle.BACKGROUND);
@@ -250,6 +251,8 @@ public final class MainActivity extends Activity {
         homeConfirm = new ConfirmPopup(this, "홈 화면으로 갈까요?",
                 "홈 화면으로 가면 음성 재생이 멈춥니다.\n그래도 홈으로 가시겠습니까?", "뒤로가기");
         appArea.addView(homeConfirm, new FrameLayout.LayoutParams(-1, -1));
+        appFrame = new FigmaFrame(this);
+        appFrame.addView(appArea);
         routeMap = new RouteMapView(this);
         routeMap.setRoute(routePoints, trip.getCurrent(), trip.getDestination(), regions);
         screen = new LinearLayout(this);
@@ -258,7 +261,7 @@ public final class MainActivity extends Activity {
     }
 
     private static final int WIDE_WINDOW_DP = 1200;
-    private static final float MAP_SHARE = 0.45f;
+    private static final float MAP_SHARE = 0.43f; // Figma: 722 of the 1682 dp frame
     /** Full window: route panel left, app right. Narrower (e.g. half split): route panel on top. */
     private void applyLayout() {
         int widthDp = getResources().getConfiguration().screenWidthDp;
@@ -267,15 +270,13 @@ public final class MainActivity extends Activity {
         screen.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         if (wide) {
             screen.addView(routeMap, new LinearLayout.LayoutParams(0, -1, MAP_SHARE));
-            screen.addView(appArea, new LinearLayout.LayoutParams(0, -1, 1 - MAP_SHARE));
+            screen.addView(appFrame, new LinearLayout.LayoutParams(0, -1, 1 - MAP_SHARE));
         } else {
             int mapHeight = Math.round(300 * getResources().getDisplayMetrics().density);
             screen.addView(routeMap, new LinearLayout.LayoutParams(-1, mapHeight));
-            screen.addView(appArea, new LinearLayout.LayoutParams(-1, 0, 1));
+            screen.addView(appFrame, new LinearLayout.LayoutParams(-1, 0, 1));
         }
-        nowPlaying.setCompact(!wide);
-        quizScreen.setCompact(!wide);
-        int appWidthDp = wide ? Math.round(widthDp * (1 - MAP_SHARE)) : widthDp;
+        int appWidthDp = Math.round(FigmaFrame.DESIGN_WIDTH_DP); // screens are laid out in Figma dp
         if (appWidthDp == dashboardWidthDp) return;
         // The dashboard sizes itself once at construction; rebuild it for the new column width.
         dashboardWidthDp = appWidthDp;
@@ -646,10 +647,10 @@ public final class MainActivity extends Activity {
         int start = row.length();
         row.append(label);
         row.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, row.length(), 0);
-        row.setSpan(new android.text.style.RelativeSizeSpan(1.15f), start, row.length(), 0);
+        row.setSpan(new android.text.style.RelativeSizeSpan(1.2f), start, row.length(), 0);
         start = row.length();
         row.append("   ").append(promise);
-        row.setSpan(new android.text.style.RelativeSizeSpan(0.75f), start, row.length(), 0);
+        row.setSpan(new android.text.style.RelativeSizeSpan(0.8f), start, row.length(), 0);
         return row;
     }
 

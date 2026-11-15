@@ -62,55 +62,64 @@ final class ArrivalScreen extends LinearLayout {
 
         addView(style.appHeader(false), matchWrap(0));
 
-        LinearLayout hero = row();
+        // Sizes are Figma dp (FigmaFrame scales the column). The mascot sits behind the greeting, as in Figma.
+        FrameLayout hero = new FrameLayout(context);
+        hero.setClipChildren(false);
+        FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(style.size(320), style.size(270),
+                Gravity.END | Gravity.CENTER_VERTICAL);
+        mascotParams.rightMargin = -style.size(36);
+        hero.addView(style.picture(R.drawable.arrival_mascot), mascotParams);
         LinearLayout copy = new LinearLayout(context);
         copy.setOrientation(VERTICAL);
-        greeting = style.text("", 40, UiStyle.INK, true);
-        greeting.setLineSpacing(style.size(2), 1f);
+        greeting = style.text("", 56, UiStyle.INK, true);
+        greeting.setLineSpacing(style.size(6), 1f);
         copy.addView(greeting);
-        copy.addView(style.text("오늘도 이동하는 시간을 성장의 시간으로 바꿨어요!", 19, UiStyle.MUTED, false), matchWrap(10));
-        hero.addView(copy, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-        hero.addView(style.picture(R.drawable.arrival_mascot), new LayoutParams(style.size(200), style.size(172)));
-        addView(hero, matchWrap(18));
+        copy.addView(style.text("오늘도 이동하는 시간을 성장의 시간으로 바꿨어요!", 25, UiStyle.MUTED, false), matchWrap(16));
+        hero.addView(copy, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL));
+        addView(hero, new LayoutParams(LayoutParams.MATCH_PARENT, style.size(270)));
+        ((LayoutParams) hero.getLayoutParams()).topMargin = style.size(20);
 
-        addView(heading("TODAY’S LEARNING ACHIEVEMENT"), matchWrap(14));
+        addView(heading("TODAY’S LEARNING ACHIEVEMENT"), matchWrap(36));
         addView(caption("오늘의 발견 키워드"), matchWrap(6));
         HorizontalScrollView chipScroll = new HorizontalScrollView(context);
         chipScroll.setHorizontalScrollBarEnabled(false);
         chipScroll.setClipToPadding(false);
         chips = row();
-        chips.setPadding(0, style.size(4), 0, style.size(6));
+        chips.setPadding(0, style.size(4), 0, style.size(8));
         chipScroll.addView(chips);
         addView(chipScroll, matchWrap(8));
         addView(caption("오늘의 학습 기록"), matchWrap(12));
-        record = style.text("", 26, RECORD, true);
-        addView(record, matchWrap(6));
+        record = style.text("", 30, RECORD, true);
+        addView(record, matchWrap(8));
 
-        addView(heading("TODAY’S GROWTH"), matchWrap(22));
+        addView(heading("TODAY’S GROWTH"), matchWrap(30));
         growthLine = caption("");
         addView(growthLine, matchWrap(6));
-        addView(growthPanel(context), new LayoutParams(LayoutParams.MATCH_PARENT, style.size(150)));
+        addView(growthPanel(context), new LayoutParams(LayoutParams.MATCH_PARENT, style.size(258)));
         earned = (TextView) findViewWithTag("earned");
         growthFill = findViewWithTag("fill");
         growthRest = findViewWithTag("rest");
 
         addView(new View(context), new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
 
-        quizNote = style.text("", 16, UiStyle.GREEN, true);
+        quizNote = style.text("", 21, UiStyle.GREEN, true);
         quizNote.setGravity(Gravity.CENTER);
         LayoutParams noteParams = matchWrap(12);
-        // Roughly centred over the quiz button (second of the bottom actions).
-        noteParams.setMarginStart(style.size(160));
-        noteParams.setMarginEnd(style.size(130));
+        // Centred over the quiz button (second of the bottom actions).
+        noteParams.setMarginStart(style.size(268));
+        noteParams.setMarginEnd(style.size(158));
         addView(quizNote, noteParams);
         LinearLayout actions = row();
         TextView review = style.action("Review lesson", false, onReview);
-        review.setTextSize(21);
-        actions.addView(review, new LayoutParams(0, style.size(56), 1f));
+        review.setTextSize(26);
+        review.setBackground(style.shape(UiStyle.NEUTRAL, 36));
+        actions.addView(review, new LayoutParams(0, style.size(72), 1f));
         quizButton = style.action("Today’s Economic Quiz", true, onQuiz);
-        quizButton.setTextSize(21);
-        LayoutParams quizParams = new LayoutParams(0, style.size(56), 1.75f);
-        quizParams.setMarginStart(style.size(12));
+        quizButton.setTextSize(26);
+        quizButton.setBackground(style.shape(UiStyle.GREEN, 36));
+        LayoutParams quizParams = new LayoutParams(0, style.size(72), 1.75f);
+        quizParams.setMarginStart(style.size(10));
         actions.addView(quizButton, quizParams);
         addIcon(actions, style.picture(R.drawable.pre_drive_settings), "시뮬레이션 설정", onSettings);
         addIcon(actions, gridIcon(), "브리핑 화면과 오늘의 발견 보기", onDetails);
@@ -127,7 +136,7 @@ final class ArrivalScreen extends LinearLayout {
             if (s.keywords.isEmpty()) chips.addView(chip("#아직 끝까지 들은 이야기가 없어요", 0), style.wrapParams());
             for (int i = 0; i < s.keywords.size(); i++) {
                 LayoutParams params = style.wrapParams();
-                if (i > 0) params.setMarginStart(style.size(12));
+                if (i > 0) params.setMarginStart(style.size(14));
                 chips.addView(chip("#" + s.keywords.get(i), i), params);
             }
         }
@@ -153,62 +162,63 @@ final class ArrivalScreen extends LinearLayout {
         panel.setClipChildren(false);
 
         LinearLayout track = new LinearLayout(context);
-        track.setBackground(style.shape(0xff98aa9f, 22));
+        track.setBackground(style.shape(0xff98aa9f, 36));
         track.setClipToOutline(true);
         View fill = new View(context);
         fill.setTag("fill");
         GradientDrawable gradient = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
                 new int[] {0xff9be3a6, 0xffd7f3e4});
-        gradient.setCornerRadius(style.size(22));
+        gradient.setCornerRadius(style.size(36));
         fill.setBackground(gradient);
         View rest = new View(context);
         rest.setTag("rest");
         track.addView(fill, new LayoutParams(0, LayoutParams.MATCH_PARENT, 0f));
         track.addView(rest, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
         FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-                style.size(44), Gravity.BOTTOM);
-        trackParams.leftMargin = style.size(70);
-        trackParams.rightMargin = style.size(70);
-        trackParams.bottomMargin = style.size(16);
+                style.size(71), Gravity.BOTTOM);
+        trackParams.leftMargin = style.size(120);
+        trackParams.rightMargin = style.size(130);
+        trackParams.bottomMargin = style.size(20);
         panel.addView(track, trackParams);
 
-        TextView xp = style.text("", 64, XP_TEXT, true);
+        TextView xp = style.text("", 90, XP_TEXT, true);
         xp.setTag("earned");
         xp.setGravity(Gravity.CENTER);
         FrameLayout.LayoutParams xpParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        xpParams.topMargin = style.size(4);
+        xpParams.topMargin = style.size(6);
         panel.addView(xp, xpParams);
 
-        panel.addView(style.picture(R.drawable.growth_now), new FrameLayout.LayoutParams(style.size(84), style.size(110),
+        panel.addView(style.picture(R.drawable.growth_now), new FrameLayout.LayoutParams(style.size(137), style.size(178),
                 Gravity.BOTTOM | Gravity.START));
-        panel.addView(style.picture(R.drawable.growth_next), new FrameLayout.LayoutParams(style.size(92), style.size(130),
+        panel.addView(style.picture(R.drawable.growth_next), new FrameLayout.LayoutParams(style.size(153), style.size(205),
                 Gravity.BOTTOM | Gravity.END));
         return panel;
     }
 
     private TextView chip(String label, int index) {
-        TextView chip = style.text(label, 22, UiStyle.INK, false);
-        chip.setPadding(style.size(20), style.size(10), style.size(20), style.size(10));
+        TextView chip = style.text(label, 28, UiStyle.INK, false);
+        chip.setPadding(style.size(26), style.size(18), style.size(26), style.size(18));
         int[] colors = CHIP_COLORS[index % CHIP_COLORS.length];
         GradientDrawable fill = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, colors);
-        fill.setCornerRadius(style.size(26));
+        fill.setCornerRadius(style.size(36));
         chip.setBackground(fill);
         return chip;
     }
 
     private TextView heading(String value) {
-        return style.text(value, 22, UiStyle.INK, true);
+        return style.text(value, 28, UiStyle.INK, true);
     }
 
     private TextView caption(String value) {
-        return style.text(value, 17, UiStyle.MUTED, false);
+        return style.text(value, 21, UiStyle.MUTED, false);
     }
 
     private void addIcon(LinearLayout row, View icon, String label, Runnable click) {
-        View button = style.iconButton(icon, 28, label, click);
-        LayoutParams params = new LayoutParams(style.size(56), style.size(56));
-        params.setMarginStart(style.size(10));
+        View button = style.iconButton(icon, 36, label, click);
+        button.setBackground(style.shape(UiStyle.NEUTRAL, 36));
+        LayoutParams params = new LayoutParams(style.size(72), style.size(72));
+        params.setMarginStart(style.size(7));
         row.addView(button, params);
     }
 
@@ -221,9 +231,9 @@ final class ArrivalScreen extends LinearLayout {
                 GradientDrawable outline = style.shape(Color.TRANSPARENT, 1);
                 outline.setStroke(Math.max(1, style.size(2)), UiStyle.MUTED);
                 cell.setBackground(outline);
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(style.size(11), style.size(11));
-                params.topMargin = style.size(2 + r * 14);
-                params.leftMargin = style.size(2 + c * 14);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(style.size(14), style.size(14));
+                params.topMargin = style.size(2 + r * 18);
+                params.leftMargin = style.size(2 + c * 18);
                 grid.addView(cell, params);
             }
         }

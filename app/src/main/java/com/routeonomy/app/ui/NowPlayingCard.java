@@ -48,22 +48,26 @@ final class NowPlayingCard extends LinearLayout {
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(style.size(32), style.size(18), style.size(32), style.size(22));
+        // Sizes are Figma dp (FigmaFrame scales the column).
+        card.setPadding(style.size(32), style.size(14), style.size(32), style.size(40));
         card.setBackground(style.shape(UiStyle.SURFACE, 22));
         card.setElevation(style.size(4));
 
-        card.addView(style.text("•  Now Playing  •", 20, UiStyle.LIVE, false), style.wrapParams());
-        title = style.text("", 32, UiStyle.INK, true);
+        card.addView(style.text("•  Now Playing  •", 21, UiStyle.LIVE, false), style.wrapParams());
+        title = style.text("", 36, UiStyle.INK, true);
         title.setGravity(Gravity.CENTER);
-        card.addView(title, centered(10));
-        subtitle = style.text("", 20, UiStyle.MUTED, false);
+        title.setMaxLines(1);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        card.addView(title, centered(14));
+        subtitle = style.text("", 23, UiStyle.MUTED, false);
         subtitle.setGravity(Gravity.CENTER);
-        subtitle.setMaxLines(2);
+        subtitle.setMaxLines(1);
+        subtitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
         card.addView(subtitle, centered(10));
 
         picture = style.picture(R.drawable.np_chip3d);
-        LayoutParams pictureParams = new LayoutParams(style.size(320), style.size(240));
-        pictureParams.topMargin = style.size(10);
+        LayoutParams pictureParams = new LayoutParams(style.size(376), style.size(298));
+        pictureParams.topMargin = style.size(18);
         card.addView(picture, pictureParams);
 
         LinearLayout labels = row();
@@ -72,7 +76,7 @@ final class NowPlayingCard extends LinearLayout {
         remaining = style.text("", 20, UiStyle.INK, false);
         remaining.setGravity(Gravity.END);
         labels.addView(remaining, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-        card.addView(labels, matchWrap(12));
+        card.addView(labels, matchWrap(16));
 
         // Trip progress: thin track with a round knob at the current point.
         LinearLayout track = row();
@@ -81,7 +85,7 @@ final class NowPlayingCard extends LinearLayout {
         track.addView(progressFill, new LayoutParams(0, style.size(5), 0f));
         View knob = new View(context);
         knob.setBackground(style.shape(UiStyle.SAGE, 11));
-        track.addView(knob, new LayoutParams(style.size(22), style.size(22)));
+        track.addView(knob, new LayoutParams(style.size(18), style.size(18)));
         progressRest = new View(context);
         progressRest.setBackground(style.shape(UiStyle.NEUTRAL, 3));
         track.addView(progressRest, new LayoutParams(0, style.size(5), 1f));
@@ -89,10 +93,10 @@ final class NowPlayingCard extends LinearLayout {
 
         LinearLayout controls = row();
         LinearLayout audio = row();
-        audio.addView(waveIcon(), new LayoutParams(style.size(42), style.size(34)));
+        audio.addView(waveIcon(), new LayoutParams(style.size(36), style.size(34)));
         LinearLayout audioText = new LinearLayout(context);
         audioText.setOrientation(VERTICAL);
-        audioText.addView(style.text("Audio\nguidance", 20, UiStyle.INK, false));
+        audioText.addView(style.text("Audio\nguidance", 19, UiStyle.INK, false));
         playbackStatus = style.text("브리핑 대기", 13, UiStyle.MUTED, false);
         playbackStatus.setMaxLines(2);
         playbackStatus.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
@@ -109,12 +113,12 @@ final class NowPlayingCard extends LinearLayout {
         style.clickable(playButton, onPlayPause);
         // Previous · play/pause · next, usable in P and D.
         LinearLayout transport = row();
-        transport.addView(skipButton("⏮\uFE0E", "이전 주제", onPrevious), new LayoutParams(style.size(52), style.size(52)));
-        LayoutParams playParams = new LayoutParams(style.size(96), style.size(96));
+        transport.addView(skipButton("⏮\uFE0E", "이전 주제", onPrevious), new LayoutParams(style.size(56), style.size(56)));
+        LayoutParams playParams = new LayoutParams(style.size(88), style.size(88));
         playParams.setMarginStart(style.size(14));
         playParams.setMarginEnd(style.size(14));
         transport.addView(playButton, playParams);
-        transport.addView(skipButton("⏭\uFE0E", "다음 주제", onNext), new LayoutParams(style.size(52), style.size(52)));
+        transport.addView(skipButton("⏭\uFE0E", "다음 주제", onNext), new LayoutParams(style.size(56), style.size(56)));
         controls.addView(transport, style.wrapParams());
 
         LinearLayout level = row();
@@ -122,7 +126,7 @@ final class NowPlayingCard extends LinearLayout {
         LinearLayout levelText = new LinearLayout(context);
         levelText.setOrientation(VERTICAL);
         levelText.setGravity(Gravity.END);
-        levelLabel = style.text("", 20, UiStyle.INK, false);
+        levelLabel = style.text("", 21, UiStyle.INK, false);
         levelLabel.setGravity(Gravity.END);
         levelText.addView(levelLabel);
         levelDetail = style.text("", 14, UiStyle.MUTED, false);
@@ -135,35 +139,41 @@ final class NowPlayingCard extends LinearLayout {
         settingsParams.setMarginStart(style.size(12));
         level.addView(settingsButton, settingsParams);
         controls.addView(level, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-        card.addView(controls, matchWrap(24));
-        addView(card, matchWrap(18));
+        card.addView(controls, matchWrap(40));
+        addView(card, matchWrap(30));
 
         // Picture strip under the card (one wide strip, or three cards for a region story).
         strip = row();
         strip.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, style.size(190)));
-        ((LayoutParams) strip.getLayoutParams()).topMargin = style.size(18);
+        addView(strip, new LayoutParams(LayoutParams.MATCH_PARENT, style.size(221)));
+        ((LayoutParams) strip.getLayoutParams()).topMargin = style.size(26);
+        // Extra height goes here so the buttons sit at the bottom, as in Figma.
+        addView(new View(context), new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
 
         // Bottom row in the shape of the home screen: home · next topic · tools (P) · details (P).
         LinearLayout actions = row();
         TextView home = style.action("← 홈으로", false, onBack);
-        home.setTextSize(20);
+        home.setTextSize(27);
+        home.setBackground(style.shape(UiStyle.NEUTRAL, 36));
         home.setContentDescription("홈 화면으로 가기");
-        actions.addView(home, new LayoutParams(0, style.size(52), 1f));
+        actions.addView(home, new LayoutParams(0, style.size(72), 1f));
         TextView next = style.action("다음 주제 듣기", true, onNext);
-        next.setTextSize(20);
-        LayoutParams nextParams = new LayoutParams(0, style.size(52), 1.75f);
-        nextParams.setMarginStart(style.size(12));
+        next.setTextSize(27);
+        next.setBackground(style.shape(UiStyle.GREEN, 36));
+        LayoutParams nextParams = new LayoutParams(0, style.size(72), 1.77f);
+        nextParams.setMarginStart(style.size(10));
         actions.addView(next, nextParams);
-        bottomSettings = style.iconButton(style.picture(R.drawable.pre_drive_settings), 28, "시뮬레이션 설정", onSettings);
-        LayoutParams gearParams = new LayoutParams(style.size(52), style.size(52));
-        gearParams.setMarginStart(style.size(10));
+        bottomSettings = style.iconButton(style.picture(R.drawable.pre_drive_settings), 36, "시뮬레이션 설정", onSettings);
+        bottomSettings.setBackground(style.shape(UiStyle.NEUTRAL, 36));
+        LayoutParams gearParams = new LayoutParams(style.size(72), style.size(72));
+        gearParams.setMarginStart(style.size(7));
         actions.addView(bottomSettings, gearParams);
-        detailsButton = style.iconButton(gridIcon(), 26, "원고와 오늘의 발견 보기", onDetails);
-        LayoutParams detailsParams = new LayoutParams(style.size(52), style.size(52));
-        detailsParams.setMarginStart(style.size(10));
+        detailsButton = style.iconButton(gridIcon(), 36, "원고와 오늘의 발견 보기", onDetails);
+        detailsButton.setBackground(style.shape(UiStyle.NEUTRAL, 36));
+        LayoutParams detailsParams = new LayoutParams(style.size(72), style.size(72));
+        detailsParams.setMarginStart(style.size(7));
         actions.addView(detailsButton, detailsParams);
-        addView(actions, matchWrap(22));
+        addView(actions, matchWrap(36));
 
         setPlaying(false);
     }
@@ -213,15 +223,6 @@ final class NowPlayingCard extends LinearLayout {
         detailsButton.setVisibility(driving ? GONE : VISIBLE); // the details only show in P
     }
 
-    /** Short window (route map on top): no picture strip and a smaller picture, so the bottom row stays on screen. */
-    void setCompact(boolean compact) {
-        strip.setVisibility(compact ? GONE : VISIBLE);
-        LayoutParams params = (LayoutParams) picture.getLayoutParams();
-        params.width = style.size(compact ? 220 : 320);
-        params.height = style.size(compact ? 160 : 240);
-        picture.requestLayout();
-    }
-
     private void bindStrip(int[] pictures) {
         if (java.util.Arrays.equals(pictures, boundStrip)) return; // bind() runs on every location fix
         boundStrip = pictures;
@@ -246,9 +247,9 @@ final class NowPlayingCard extends LinearLayout {
                 outline.setStroke(Math.max(1, style.size(2)), UiStyle.MUTED);
                 cell.setBackground(outline);
                 android.widget.FrameLayout.LayoutParams params =
-                        new android.widget.FrameLayout.LayoutParams(style.size(10), style.size(10));
-                params.topMargin = style.size(2 + r * 13);
-                params.leftMargin = style.size(2 + c * 13);
+                        new android.widget.FrameLayout.LayoutParams(style.size(14), style.size(14));
+                params.topMargin = style.size(2 + r * 18);
+                params.leftMargin = style.size(2 + c * 18);
                 grid.addView(cell, params);
             }
         }

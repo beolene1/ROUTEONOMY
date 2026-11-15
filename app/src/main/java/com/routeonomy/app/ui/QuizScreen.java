@@ -89,16 +89,17 @@ final class QuizScreen extends LinearLayout {
         setClipChildren(false);
 
         addView(style.appHeader(false), matchWrap(0));
-        title = style.text("Today’s Economic Quiz", 44, UiStyle.INK, true);
+        // Sizes are Figma dp (FigmaFrame scales the column).
+        title = style.text("Today’s Economic Quiz", 54, UiStyle.INK, true);
         title.setGravity(Gravity.CENTER);
-        addView(title, matchWrap(40));
-        intro = style.text("", 18, UiStyle.INK, false);
+        addView(title, matchWrap(64));
+        intro = style.text("", 19, UiStyle.INK, false);
         intro.setGravity(Gravity.CENTER);
-        intro.setLineSpacing(style.size(5), 1f);
-        addView(intro, matchWrap(22));
+        intro.setLineSpacing(style.size(8), 1f);
+        addView(intro, matchWrap(30));
 
         LinearLayout progress = row();
-        progressLabel = style.text("", 17, UiStyle.MUTED, false);
+        progressLabel = style.text("", 19, UiStyle.MUTED, false);
         progress.addView(progressLabel, style.wrapParams());
         LinearLayout track = new LinearLayout(context);
         track.setBackground(style.shape(UiStyle.NEUTRAL, 8));
@@ -108,30 +109,31 @@ final class QuizScreen extends LinearLayout {
         progressRest = new View(context);
         track.addView(progressFill, new LayoutParams(0, LayoutParams.MATCH_PARENT, 0f));
         track.addView(progressRest, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
-        LayoutParams trackParams = new LayoutParams(0, style.size(16), 1f);
+        LayoutParams trackParams = new LayoutParams(0, style.size(19), 1f);
         trackParams.setMarginStart(style.size(12));
         trackParams.setMarginEnd(style.size(10));
         progress.addView(track, trackParams);
-        xpLabel = style.text("", 17, UiStyle.MUTED, false);
+        xpLabel = style.text("", 19, UiStyle.MUTED, false);
         progress.addView(xpLabel, style.wrapParams());
-        addView(progress, matchWrap(18));
+        addView(progress, matchWrap(20));
 
         // Question card; the grading mark is drawn over its left end like a red pen.
         FrameLayout cardFrame = new FrameLayout(context);
         cardFrame.setClipChildren(false);
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(VERTICAL);
-        card.setPadding(style.size(22), style.size(10), style.size(22), style.size(16));
+        card.setPadding(style.size(24), style.size(12), style.size(24), style.size(20));
+        card.setMinimumHeight(style.size(100));
         style.card(card);
-        badge = style.pill("Today’s learning", UiStyle.GREEN, UiStyle.MINT, 13);
+        badge = style.pill("Today’s learning", UiStyle.GREEN, UiStyle.MINT, 15);
         badge.setPadding(style.size(8), style.size(2), style.size(8), style.size(2));
         LayoutParams badgeParams = style.wrapParams();
         badgeParams.setMarginStart(style.size(46));
         card.addView(badge, badgeParams);
         LinearLayout questionRow = row();
-        number = style.text("", 26, UiStyle.SAGE, true);
+        number = style.text("", 28, UiStyle.SAGE, true);
         questionRow.addView(number, style.wrapParams());
-        question = style.text("", 20, UiStyle.INK, true);
+        question = style.text("", 22, UiStyle.INK, true);
         question.setLineSpacing(style.size(3), 1f);
         LayoutParams questionParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         questionParams.setMarginStart(style.size(10));
@@ -140,26 +142,26 @@ final class QuizScreen extends LinearLayout {
         cardFrame.addView(card, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT));
         mark = new GradeMark(context);
-        FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(style.size(150), style.size(150),
+        FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(style.size(190), style.size(200),
                 Gravity.START | Gravity.CENTER_VERTICAL);
-        markParams.leftMargin = -style.size(30);
+        markParams.leftMargin = -style.size(44);
         cardFrame.addView(mark, markParams);
-        addView(cardFrame, matchWrap(30));
+        addView(cardFrame, matchWrap(12));
 
         choices = new LinearLayout(context);
         choices.setOrientation(VERTICAL);
-        LayoutParams choicesParams = matchWrap(6);
-        choicesParams.setMarginStart(style.size(40));
-        choicesParams.setMarginEnd(style.size(26));
+        LayoutParams choicesParams = matchWrap(-18); // the mark frame is taller than the card
+        choicesParams.setMarginStart(style.size(49));
+        choicesParams.setMarginEnd(style.size(29));
         addView(choices, choicesParams);
 
-        feedback = style.text("", 17, UiStyle.INK, false);
-        feedback.setLineSpacing(style.size(4), 1f);
-        feedback.setPadding(style.size(20), style.size(12), style.size(20), style.size(12));
+        feedback = style.text("", 19, UiStyle.INK, false);
+        feedback.setLineSpacing(style.size(5), 1f);
+        feedback.setPadding(style.size(22), style.size(14), style.size(22), style.size(14));
         feedback.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
-        LayoutParams feedbackParams = matchWrap(22);
-        feedbackParams.setMarginStart(style.size(24));
-        feedbackParams.setMarginEnd(style.size(26));
+        LayoutParams feedbackParams = matchWrap(28);
+        feedbackParams.setMarginStart(style.size(26));
+        feedbackParams.setMarginEnd(style.size(29));
         addView(feedback, feedbackParams);
 
         // Pushes the buttons to the bottom when the screen is taller than the content.
@@ -167,16 +169,18 @@ final class QuizScreen extends LinearLayout {
 
         LinearLayout actions = row();
         leftButton = style.action("Need a hint?", false, this::onLeft);
-        leftButton.setTextSize(22);
-        actions.addView(leftButton, new LayoutParams(0, style.size(56), 1f));
+        leftButton.setTextSize(27);
+        leftButton.setBackground(style.shape(UiStyle.NEUTRAL, 36));
+        actions.addView(leftButton, new LayoutParams(0, style.size(72), 1f));
         primary = style.action("", true, this::onPrimary);
-        primary.setTextSize(22);
-        LayoutParams primaryParams = new LayoutParams(0, style.size(56), 1.75f);
-        primaryParams.setMarginStart(style.size(12));
+        primary.setTextSize(27);
+        primary.setBackground(style.shape(UiStyle.GREEN, 36));
+        LayoutParams primaryParams = new LayoutParams(0, style.size(72), 1.77f);
+        primaryParams.setMarginStart(style.size(10));
         actions.addView(primary, primaryParams);
         addIcon(actions, style.picture(R.drawable.pre_drive_settings), "시뮬레이션 설정", onSettings);
         addIcon(actions, gridIcon(), "퀴즈 닫기", onClose);
-        addView(actions, matchWrap(24));
+        addView(actions, matchWrap(20));
     }
 
     /** Called when the quiz object, question, answer or XP changed; a new question drops the unsubmitted selection. */
@@ -195,14 +199,6 @@ final class QuizScreen extends LinearLayout {
     }
 
     private int shownPosition = -1;
-
-    /** Short window (route map on top): smaller title and gaps so the buttons stay on screen. */
-    void setCompact(boolean compact) {
-        title.setTextSize(compact ? 32 : 44);
-        ((LayoutParams) title.getLayoutParams()).topMargin = style.size(compact ? 14 : 40);
-        ((LayoutParams) intro.getLayoutParams()).topMargin = style.size(compact ? 10 : 22);
-        title.requestLayout();
-    }
 
     private void refresh() {
         int total = quiz.total();
@@ -238,7 +234,7 @@ final class QuizScreen extends LinearLayout {
         Integer selected = quiz.selectedChoice();
         List<String> options = current.getChoices();
         for (int i = 0; i < options.size(); i++) {
-            choices.addView(choiceCard(i, options.get(i), current.getAnswerIndex(), selected), matchWrap(i == 0 ? 0 : 18));
+            choices.addView(choiceCard(i, options.get(i), current.getAnswerIndex(), selected), matchWrap(i == 0 ? 0 : 26));
         }
 
         if (selected == null) {
@@ -277,18 +273,18 @@ final class QuizScreen extends LinearLayout {
         boolean green = isAnswer || isPending;
 
         LinearLayout card = row();
-        card.setPadding(style.size(16), style.size(12), style.size(16), style.size(12));
-        card.setMinimumHeight(style.size(70));
+        card.setPadding(style.size(18), style.size(12), style.size(18), style.size(12));
+        card.setMinimumHeight(style.size(84));
         card.setBackground(style.shape(green ? PICKED_FILL : isWrongPick ? WRONG_FILL : Color.WHITE, 12));
         card.setElevation(style.size(green || isWrongPick ? 6 : 3));
         if (checked && !isAnswer && !isWrongPick) card.setAlpha(0.7f);
 
-        TextView letterBadge = style.text(letter(index), 20, isWrongPick ? Color.WHITE : green ? UiStyle.GREEN : UiStyle.MUTED, false);
+        TextView letterBadge = style.text(letter(index), 23, isWrongPick ? Color.WHITE : green ? UiStyle.GREEN : UiStyle.MUTED, false);
         letterBadge.setGravity(Gravity.CENTER);
-        letterBadge.setBackground(style.shape(green ? PICKED_BADGE : isWrongPick ? WRONG_BADGE : UiStyle.NEUTRAL, 20));
+        letterBadge.setBackground(style.shape(green ? PICKED_BADGE : isWrongPick ? WRONG_BADGE : UiStyle.NEUTRAL, 24));
         letterBadge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        card.addView(letterBadge, new LayoutParams(style.size(40), style.size(40)));
-        TextView text = style.text(label, 18, UiStyle.INK, false);
+        card.addView(letterBadge, new LayoutParams(style.size(48), style.size(48)));
+        TextView text = style.text(label, 20, UiStyle.INK, false);
         text.setLineSpacing(style.size(3), 1f);
         LayoutParams textParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         textParams.setMarginStart(style.size(14));
@@ -358,9 +354,10 @@ final class QuizScreen extends LinearLayout {
     }
 
     private void addIcon(LinearLayout row, View icon, String label, Runnable click) {
-        View button = style.iconButton(icon, 28, label, click);
-        LayoutParams params = new LayoutParams(style.size(56), style.size(56));
-        params.setMarginStart(style.size(10));
+        View button = style.iconButton(icon, 36, label, click);
+        button.setBackground(style.shape(UiStyle.NEUTRAL, 36));
+        LayoutParams params = new LayoutParams(style.size(72), style.size(72));
+        params.setMarginStart(style.size(7));
         row.addView(button, params);
     }
 
@@ -373,9 +370,9 @@ final class QuizScreen extends LinearLayout {
                 GradientDrawable outline = style.shape(Color.TRANSPARENT, 1);
                 outline.setStroke(Math.max(1, style.size(2)), UiStyle.MUTED);
                 cell.setBackground(outline);
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(style.size(11), style.size(11));
-                params.topMargin = style.size(2 + r * 14);
-                params.leftMargin = style.size(2 + c * 14);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(style.size(14), style.size(14));
+                params.topMargin = style.size(2 + r * 18);
+                params.leftMargin = style.size(2 + c * 18);
                 grid.addView(cell, params);
             }
         }

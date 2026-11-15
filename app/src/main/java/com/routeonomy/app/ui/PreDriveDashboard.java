@@ -52,11 +52,12 @@ final class PreDriveDashboard extends LinearLayout {
         style = new UiStyle(context, windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f);
         setOrientation(VERTICAL);
         setBackgroundColor(BACKGROUND);
-        setPadding(size(narrow ? 24 : 49), size(40), size(narrow ? 24 : 49), size(48));
+        // Sizes are Figma dp (FigmaFrame scales the column).
+        setPadding(size(narrow ? 24 : 46), size(41), size(narrow ? 24 : 46), size(48));
 
         addView(header(), rowParams(0));
-        addView(greeting(), rowParams(32));
-        addView(sectionTitle("OVER NIGHT MARKET SUMMARY", "밤사이 글로벌 시장의 주요 흐름을 확인해 보세요."), rowParams(26));
+        addView(greeting(), rowParams(36));
+        addView(sectionTitle("OVER NIGHT MARKET SUMMARY", "밤사이 글로벌 시장의 주요 흐름을 확인해 보세요."), rowParams(40));
         addMarketRows();
 
         // Topic heading and linked index card on the left, the study mascot with its speech bubble on the right.
@@ -65,61 +66,65 @@ final class PreDriveDashboard extends LinearLayout {
         LinearLayout topicLeft = column();
         topicLeft.addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"));
         indexSlot = row();
-        topicLeft.addView(indexSlot, rowParams(14));
+        topicLeft.addView(indexSlot, rowParams(20));
         topicHead.addView(topicLeft, new LayoutParams(0, LayoutParams.WRAP_CONTENT, narrow ? 1f : 1.15f));
         FrameLayout buddy = new FrameLayout(context);
-        bubble = text("", narrow ? 14 : 16, GREEN, true);
+        bubble = text("", narrow ? 16 : 20, GREEN, true);
         bubble.setGravity(Gravity.CENTER);
-        bubble.setLineSpacing(size(2), 1f);
-        bubble.setPadding(size(18), size(12), size(18), size(12));
-        bubble.setBackground(shape(BUBBLE, 60));
+        bubble.setLineSpacing(size(3), 1f);
+        bubble.setPadding(size(22), size(22), size(22), size(22));
+        bubble.setBackground(shape(BUBBLE, 90));
         bubble.setMaxLines(3);
-        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(narrow ? 170 : 210), LayoutParams.WRAP_CONTENT,
+        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(narrow ? 190 : 245), LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.START);
-        bubbleParams.topMargin = size(4);
         buddy.addView(bubble, bubbleParams);
-        place(buddy, picture(R.drawable.home_study_mascot), narrow ? 110 : 150, narrow ? 111 : 151, Gravity.BOTTOM | Gravity.END);
-        topicHead.addView(buddy, new LayoutParams(0, size(narrow ? 150 : 190), 1f));
-        addView(topicHead, rowParams(20));
-        indexCaption = text("", 15, MUTED, false);
-        addView(indexCaption, rowParams(10));
+        place(buddy, picture(R.drawable.home_study_mascot), narrow ? 130 : 190, narrow ? 131 : 191, Gravity.BOTTOM | Gravity.END);
+        topicHead.addView(buddy, new LayoutParams(0, size(narrow ? 190 : 245), 1f));
+        addView(topicHead, rowParams(24));
+        indexCaption = text("", 19, MUTED, false);
+        addView(indexCaption, rowParams(14));
 
         learning = row();
         styleCard(learning);
-        learning.setPadding(size(15), size(11), size(15), size(11));
+        learning.setPadding(size(16), size(14), size(16), size(14));
         FrameLayout thumbnail = new FrameLayout(context);
         thumbnail.setBackground(shape(MINT, 10));
         thumbnail.setClipToOutline(true);
-        place(thumbnail, picture(R.drawable.pre_drive_chip), 119, 78, Gravity.CENTER);
-        learning.addView(thumbnail, new LayoutParams(size(narrow ? 124 : 168), size(85)));
+        place(thumbnail, picture(R.drawable.pre_drive_chip), 140, 92, Gravity.CENTER);
+        learning.addView(thumbnail, new LayoutParams(size(narrow ? 140 : 184), size(102)));
 
         LinearLayout copy = column();
-        TextView badge = pill("Today’s learning", GREEN, MINT, 15);
+        TextView badge = pill("Today’s learning", GREEN, MINT, 16);
         copy.addView(badge, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
-        topic = text("", 20, INK, true);
-        copy.addView(topic, rowParams(4));
-        description = text("", 15, MUTED, false);
+        topic = text("", 27, INK, true);
+        topic.setMaxLines(1);
+        topic.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        copy.addView(topic, rowParams(6));
+        description = text("", 19, MUTED, false);
         description.setMaxLines(1);
         description.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        copy.addView(description, rowParams(4));
+        copy.addView(description, rowParams(6));
         LayoutParams copyParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        copyParams.setMarginStart(size(14));
+        copyParams.setMarginStart(size(18));
         learning.addView(copy, copyParams);
-        addView(learning, rowParams(10));
+        addView(learning, rowParams(14));
         enableSwipe(learning);
+
+        // Extra height goes here so the buttons sit at the bottom, as in Figma.
+        addView(new View(context), new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout actions = row();
         changeButton = action("Change topic", MUTED, NEUTRAL, () -> { if (canChangeTopic) onChangeTopic.run(); });
         startButton = action("Start today’s learning", Color.WHITE, GREEN, onStart);
-        actions.addView(changeButton, new LayoutParams(0, size(49), 1f));
-        LayoutParams startParams = new LayoutParams(0, size(49), 2f);
-        startParams.setMarginStart(size(12));
+        actions.addView(changeButton, new LayoutParams(0, size(72), 1f));
+        LayoutParams startParams = new LayoutParams(0, size(72), 1.77f);
+        startParams.setMarginStart(size(10));
         actions.addView(startButton, startParams);
         addActionIcon(actions, picture(R.drawable.pre_drive_settings), "시뮬레이션 설정", onSettings);
         addActionIcon(actions, gridIcon(), "브리핑과 퀴즈 화면", onFeatures);
-        addView(actions, rowParams(22));
+        addView(actions, rowParams(29));
 
-        status = text("", 16, MUTED, false);
+        status = text("", 18, MUTED, false);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         status.setVisibility(GONE);
         addView(status, rowParams(8));
@@ -226,18 +231,18 @@ final class PreDriveDashboard extends LinearLayout {
 
     private LinearLayout greeting() {
         LinearLayout hero = row();
-        hero.setMinimumHeight(size(180));
+        hero.setMinimumHeight(size(245));
         LinearLayout copy = column();
-        TextView title = text(greetingText(), narrow ? 34 : 40, INK, true);
-        title.setLineSpacing(size(2), 1f);
+        TextView title = text(greetingText(), narrow ? 40 : 56, INK, true);
+        title.setLineSpacing(size(6), 1f);
         greetingTitle = title;
         copy.addView(title);
-        copy.addView(text("오늘도 이동하는 시간을 성장의 시간으로 바꿔볼까요?", 20, MUTED, false),
-                rowParams(8));
+        copy.addView(text("오늘도 이동하는 시간을 성장의 시간으로 바꿔볼까요?", 25, MUTED, false),
+                rowParams(16));
         hero.addView(copy, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         ImageView mascot = picture(R.drawable.pre_drive_mascot);
-        LayoutParams mascotParams = new LayoutParams(size(narrow ? 108 : 145), size(narrow ? 120 : 160));
-        mascotParams.setMarginEnd(size(narrow ? 0 : 50));
+        LayoutParams mascotParams = new LayoutParams(size(narrow ? 140 : 192), size(narrow ? 180 : 245));
+        mascotParams.setMarginEnd(size(narrow ? 0 : 14));
         hero.addView(mascot, mascotParams);
         return hero;
     }
@@ -245,8 +250,8 @@ final class PreDriveDashboard extends LinearLayout {
     /** Bold uppercase heading with its Korean caption underneath. */
     private LinearLayout sectionTitle(String heading, String caption) {
         LinearLayout title = column();
-        title.addView(text(heading, 22, INK, true));
-        title.addView(text(caption, 18, MUTED, false), rowParams(6));
+        title.addView(text(heading, 26, INK, true));
+        title.addView(text(caption, 22, MUTED, false), rowParams(8));
         return title;
     }
 
@@ -255,63 +260,63 @@ final class PreDriveDashboard extends LinearLayout {
         addMarketCard(market, "S&P 500", true);
         addMarketCard(market, "NASDAQ", false);
         if (narrow) {
-            addView(market, rowParams(16));
+            addView(market, rowParams(24));
             market = row();
         }
         addMarketCard(market, "USD/KRW", true);
         if (narrow) market.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
-        addView(market, rowParams(narrow ? 12 : 16));
+        addView(market, rowParams(narrow ? 16 : 24));
     }
 
     private void addMarketCard(LinearLayout market, String symbol, boolean rising) {
         LinearLayout card = column();
-        card.setPadding(size(15), size(12), size(15), size(11));
+        card.setPadding(size(18), size(16), size(18), size(14));
         styleCard(card);
-        card.addView(text(symbol, 15, INK, true));
+        card.addView(text(symbol, 20, INK, true));
 
         LinearLayout valueRow = row();
         FrameLayout movement = new FrameLayout(getContext());
         place(movement, picture(rising ? R.drawable.pre_drive_gain_circle : R.drawable.pre_drive_loss_circle),
-                24, 24, Gravity.CENTER);
+                31, 31, Gravity.CENTER);
         ImageView arrow = picture(rising ? R.drawable.pre_drive_gain_arrow : R.drawable.pre_drive_loss_arrow);
         if (!rising) arrow.setScaleY(-1);
-        place(movement, arrow, 12, 11, Gravity.CENTER);
-        valueRow.addView(movement, new LayoutParams(size(24), size(24)));
-        TextView value = text("0.05%", 20, INK, false);
+        place(movement, arrow, 15, 14, Gravity.CENTER);
+        valueRow.addView(movement, new LayoutParams(size(31), size(31)));
+        TextView value = text("0.05%", 26, INK, false);
         value.setContentDescription(rising ? "0.05% 상승, 예시" : "0.05% 하락, 예시");
         LayoutParams valueParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        valueParams.setMarginStart(size(3));
+        valueParams.setMarginStart(size(6));
         valueRow.addView(value, valueParams);
 
         FrameLayout chart = new FrameLayout(getContext());
         place(chart, picture(rising ? R.drawable.pre_drive_gain_fill : R.drawable.pre_drive_loss_fill),
-                66, rising ? 32 : 30, Gravity.TOP | Gravity.START);
+                88, rising ? 43 : 40, Gravity.TOP | Gravity.START);
         place(chart, picture(rising ? R.drawable.pre_drive_gain_line : R.drawable.pre_drive_loss_line),
-                67, rising ? 31 : 24, Gravity.TOP | Gravity.START);
-        valueRow.addView(chart, new LayoutParams(size(67), size(32)));
-        card.addView(valueRow, rowParams(4));
+                90, rising ? 42 : 32, Gravity.TOP | Gravity.START);
+        valueRow.addView(chart, new LayoutParams(size(90), size(43)));
+        card.addView(valueRow, rowParams(8));
 
-        LayoutParams params = new LayoutParams(0, size(87), 1f);
-        if (market.getChildCount() > 0) params.setMarginStart(size(25));
+        LayoutParams params = new LayoutParams(0, size(115), 1f);
+        if (market.getChildCount() > 0) params.setMarginStart(size(34));
         market.addView(card, params);
     }
 
     private TextView action(String title, int color, int fill, Runnable click) {
-        TextView action = text(title, 20, color, fill == GREEN);
+        TextView action = text(title, 27, color, fill == GREEN);
         action.setGravity(Gravity.CENTER);
-        action.setBackground(shape(fill, 25));
+        action.setBackground(shape(fill, 36));
         configureAction(action, click);
         return action;
     }
 
     private void addActionIcon(LinearLayout row, View icon, String label, Runnable click) {
         FrameLayout action = new FrameLayout(getContext());
-        action.setBackground(shape(NEUTRAL, 25));
+        action.setBackground(shape(NEUTRAL, 36));
         action.setContentDescription(label);
         configureAction(action, click);
-        place(action, icon, 30, 30, Gravity.CENTER);
-        LayoutParams params = new LayoutParams(size(49), size(49));
-        params.setMarginStart(size(9));
+        place(action, icon, 36, 36, Gravity.CENTER);
+        LayoutParams params = new LayoutParams(size(72), size(72));
+        params.setMarginStart(size(7));
         row.addView(action, params);
     }
 
@@ -327,9 +332,9 @@ final class PreDriveDashboard extends LinearLayout {
                 GradientDrawable outline = shape(Color.TRANSPARENT, 1);
                 outline.setStroke(Math.max(1, size(2)), MUTED);
                 cell.setBackground(outline);
-                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size(11), size(11));
-                params.topMargin = size(3 + row * 13);
-                params.leftMargin = size(3 + column * 13);
+                FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(size(14), size(14));
+                params.topMargin = size(2 + row * 18);
+                params.leftMargin = size(2 + column * 18);
                 grid.addView(cell, params);
             }
         }

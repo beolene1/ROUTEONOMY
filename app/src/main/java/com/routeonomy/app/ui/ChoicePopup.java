@@ -43,39 +43,42 @@ final class ChoicePopup extends FrameLayout {
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setPadding(style.size(36), style.size(26), style.size(36), style.size(26));
-        card.setBackground(style.shape(0xf7f7f7f2, 18));
+        // Sizes are Figma dp (FigmaFrame scales the column).
+        card.setPadding(style.size(44), style.size(32), style.size(44), style.size(36));
+        card.setBackground(style.shape(0xf7f7f7f2, 20));
         card.setElevation(style.size(10));
 
-        title = style.text("", 30, UiStyle.INK, false);
+        title = style.text("", 34, UiStyle.INK, false);
         title.setGravity(Gravity.CENTER);
         card.addView(title, style.wrapParams());
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
-        card.addView(rows, matchWrap(18));
+        card.addView(rows, matchWrap(26));
 
         LinearLayout actions = new LinearLayout(context);
         actions.setGravity(Gravity.CENTER);
         primary = style.action("", true, this::onPrimary);
-        primary.setTextSize(22);
-        actions.addView(primary, new LinearLayout.LayoutParams(0, style.size(58), 1.6f));
+        primary.setTextSize(26);
+        primary.setBackground(style.shape(UiStyle.GREEN, 37));
+        actions.addView(primary, new LinearLayout.LayoutParams(0, style.size(74), 2.45f));
         secondary = style.action("", false, () -> {
             if (handler != null) handler.onSecondary();
         });
-        secondary.setTextSize(22);
-        LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(0, style.size(58), 1f);
-        secondaryParams.setMarginStart(style.size(14));
+        secondary.setTextSize(26);
+        secondary.setBackground(style.shape(UiStyle.NEUTRAL, 37));
+        LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(0, style.size(74), 1f);
+        secondaryParams.setMarginStart(style.size(18));
         actions.addView(secondary, secondaryParams);
-        LinearLayout.LayoutParams actionsParams = matchWrap(24);
-        actionsParams.setMarginStart(style.size(40));
-        actionsParams.setMarginEnd(style.size(40));
+        LinearLayout.LayoutParams actionsParams = matchWrap(36);
+        actionsParams.setMarginStart(style.size(56));
+        actionsParams.setMarginEnd(style.size(56));
         card.addView(actions, actionsParams);
 
         LayoutParams cardParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        cardParams.leftMargin = style.size(28);
-        cardParams.rightMargin = style.size(28);
-        cardParams.bottomMargin = style.size(24);
+        cardParams.leftMargin = style.size(46);
+        cardParams.rightMargin = style.size(46);
+        cardParams.bottomMargin = style.size(36);
         addView(card, cardParams);
     }
 
@@ -95,18 +98,18 @@ final class ChoicePopup extends FrameLayout {
         rows.removeAllViews();
         for (int i = 0; i < options.size(); i++) {
             final int index = i;
-            TextView row = style.text("", 20, 0xffffffff, centered);
+            TextView row = style.text("", centered ? 26 : 24, 0xffffffff, centered);
             row.setText(options.get(i));
             row.setGravity(centered ? Gravity.CENTER : Gravity.CENTER_VERTICAL | Gravity.START);
-            row.setPadding(style.size(24), style.size(12), style.size(24), style.size(12));
-            row.setMinHeight(style.size(58));
+            row.setPadding(style.size(40), style.size(12), style.size(40), style.size(12));
+            row.setMinHeight(style.size(centered ? 80 : 84));
             style.clickable(row, () -> {
                 if (this.handler != null && this.handler.onPick(index)) {
                     selected = index;
                     refreshRows();
                 }
             });
-            rows.addView(row, matchWrap(i == 0 ? 0 : 12));
+            rows.addView(row, matchWrap(i == 0 ? 0 : 16));
         }
         refreshRows();
         setVisibility(VISIBLE);
