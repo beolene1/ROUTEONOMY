@@ -631,7 +631,8 @@ public final class MainActivity extends Activity {
                 new ChoicePopup.Handler() {
                     @Override public boolean onPick(int index) {
                         if (index != voice) return true;
-                        android.widget.Toast.makeText(MainActivity.this, "음성으로 말하기는 준비 중이에요.", android.widget.Toast.LENGTH_SHORT).show();
+                        choicePopup.showNotice("🎙️ 음성으로 말하기는 준비 중이에요.\n"
+                                + "앞으로 Pleos SDK와 연결해, 음성으로 오늘의 콘텐츠와 난이도에 대한 의견을 보내는 기능을 개발할 예정입니다.");
                         return false;
                     }
                     @Override public void onPrimary(int selected) {

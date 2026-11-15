@@ -27,6 +27,8 @@ final class ChoicePopup extends FrameLayout {
     private final UiStyle style;
     private final TextView title;
     private final LinearLayout rows;
+    private final TextView notice;
+    private final Runnable hideNotice;
     private final TextView primary;
     private final TextView secondary;
     private Handler handler;
@@ -54,6 +56,17 @@ final class ChoicePopup extends FrameLayout {
         rows = new LinearLayout(context);
         rows.setOrientation(LinearLayout.VERTICAL);
         card.addView(rows, matchWrap(26));
+        // Short notice inside the card (e.g. a feature still to come); fades out by itself.
+        notice = style.text("", 20, UiStyle.GREEN, false);
+        notice.setGravity(Gravity.CENTER);
+        notice.setLineSpacing(style.size(4), 1f);
+        notice.setPadding(style.size(24), style.size(16), style.size(24), style.size(16));
+        notice.setBackground(style.shape(UiStyle.MINT, 16));
+        notice.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
+        notice.setVisibility(GONE);
+        card.addView(notice, matchWrap(18));
+        hideNotice = () -> notice.animate().alpha(0f).setDuration(300)
+                .withEndAction(() -> notice.setVisibility(GONE)).start();
 
         LinearLayout actions = new LinearLayout(context);
         actions.setGravity(Gravity.CENTER);
@@ -133,7 +146,21 @@ final class ChoicePopup extends FrameLayout {
         if (handler != null && (!needsSelection || selected >= 0)) handler.onPrimary(selected);
     }
 
+    /** Shows [message] in the card for a few seconds. */
+    void showNotice(CharSequence message) {
+        removeCallbacks(hideNotice);
+        notice.animate().cancel();
+        notice.setText(message);
+        notice.setAlpha(0f);
+        notice.setVisibility(VISIBLE);
+        notice.animate().alpha(1f).setDuration(200).start();
+        postDelayed(hideNotice, 4000);
+    }
+
     void hide() {
+        removeCallbacks(hideNotice);
+        notice.animate().cancel();
+        notice.setVisibility(GONE);
         setVisibility(GONE);
         handler = null;
     }
