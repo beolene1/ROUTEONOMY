@@ -420,7 +420,7 @@ public final class MainActivity extends Activity {
         render();
     }
 
-    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
+    private void addMoveButton(Place stop){Button b=button(stop.getName()+LevelUpPopup.particleRo(stop.getName())+" 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
     private void onRealLocation(GeoPoint point) {
@@ -619,7 +619,7 @@ public final class MainActivity extends Activity {
         summary.earnedThisRun = progress.earnedThisRun();
         Integer toNext = progress.pointsToNextStage();
         com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
-        summary.growthLine = (grown == null ? "" : grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요! ")
+        summary.growthLine = (grown == null ? "" : grown.getEmoji() + " " + grown.getLabel() + LevelUpPopup.particleRo(grown.getLabel()) + " 자랐어요! ")
                 + (next == null ? "마지막 단계에 도착했어요!" : "다음 단계 '" + next.getLabel() + "'까지 " + toNext + "XP 남았어요!");
         summary.heroArt = StageArt.arrival(stage);
         summary.nowArt = StageArt.character(stage);

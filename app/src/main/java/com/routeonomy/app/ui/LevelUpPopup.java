@@ -115,7 +115,7 @@ final class LevelUpPopup extends FrameLayout {
             Runnable onReview, Runnable onClose) {
         this.onPrimary = onReview;
         this.onSecondary = onClose;
-        title.setText(to.getLabel() + "(으)로 자랐어요!");
+        title.setText(to.getLabel() + particleRo(to.getLabel()) + " 자랐어요!");
         character.setImageResource(art);
         path.removeAllViews();
         path.addView(chip(from.getEmoji() + " " + from.getLabel(), CHIP_OLD, UiStyle.MUTED), style.wrapParams());
@@ -177,6 +177,14 @@ final class LevelUpPopup extends FrameLayout {
         if (pop != null) pop.cancel();
         if (bob != null) bob.cancel();
         super.onDetachedFromWindow();
+    }
+
+    /** "으로" after a final consonant (except ㄹ), else "로": 새싹으로, 줄기로, 꽃으로, 열매로. */
+    static String particleRo(String word) {
+        char last = word.isEmpty() ? 'a' : word.charAt(word.length() - 1);
+        if (last < 0xAC00 || last > 0xD7A3) return "로";
+        int jong = (last - 0xAC00) % 28;
+        return jong == 0 || jong == 8 ? "로" : "으로";
     }
 
     private TextView chip(String label, int[] colors, int textColor) {
