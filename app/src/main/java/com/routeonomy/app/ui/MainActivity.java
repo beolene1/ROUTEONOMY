@@ -187,7 +187,10 @@ public final class MainActivity extends Activity {
         briefingScroll = new ScrollView(this);
         briefingScroll.setFillViewport(true);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(style.size(40),style.size(41),style.size(40),style.size(48)); // Figma dp root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
+        // Figma dp padding (FigmaFrame scales the column).
+        root.setPadding(style.size(40),style.size(41),style.size(40),style.size(48));
+        root.setBackgroundColor(UiStyle.BACKGROUND);
+        briefingScroll.addView(root);
         nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
                 this::previousTopic, this::nextTopic, this::toggleSimulationFromCard, this::toggleDetails);
         root.addView(nowPlaying, new LinearLayout.LayoutParams(-1, 0, 1f)); // fills the column: buttons at the bottom
