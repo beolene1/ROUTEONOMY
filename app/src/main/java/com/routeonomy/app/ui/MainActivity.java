@@ -634,7 +634,8 @@ public final class MainActivity extends Activity {
         summary.stageName = stage.getLabel();
         List<BriefingSegment> heard = TodayDiscoveries.from(segments, briefing.completedSegmentIds());
         for (BriefingSegment s : heard) {
-            String index = TopicVisuals.of(s).index;
+            IndicatorKind linked = TopicVisuals.of(s).indicator;
+            String index = linked == null ? null : linked.getTitle();
             for (String key : new String[] {s.getKeywords().isEmpty() ? null : s.getKeywords().get(0), index}) {
                 if (key == null) continue;
                 String tag = key.replace(" ", "");

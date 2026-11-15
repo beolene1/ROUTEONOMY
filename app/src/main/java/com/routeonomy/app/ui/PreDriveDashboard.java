@@ -44,8 +44,9 @@ final class PreDriveDashboard extends LinearLayout {
     private final TextView bubble;
     private final LinearLayout indexSlot;
     private final TextView indexCaption;
-    private String boundIndex;
-    private Boolean boundRising;
+    private IndicatorKind linkedKind;
+    private IndicatorCard linkedCard;
+    private final Map<IndicatorKind, MarketIndicator> latestIndicators = new EnumMap<>(IndicatorKind.class);
     private final Map<IndicatorKind, IndicatorCard> indicatorCards = new EnumMap<>(IndicatorKind.class);
     private final Runnable onNext;
     private final Runnable onPrevious;
@@ -75,6 +76,7 @@ final class PreDriveDashboard extends LinearLayout {
         LinearLayout topicLeft = column();
         topicLeft.addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"));
         indexSlot = row();
+        indexSlot.setVisibility(GONE); // shown only for a topic with a linked indicator
         topicLeft.addView(indexSlot, rowParams(20));
         topicHead.addView(topicLeft, new LayoutParams(0, LayoutParams.WRAP_CONTENT, narrow ? 1f : 1.15f));
         FrameLayout buddy = new FrameLayout(context);
@@ -146,28 +148,28 @@ final class PreDriveDashboard extends LinearLayout {
         description.setText(visuals.question == null ? "" : "★  " + visuals.question);
         description.setVisibility(visuals.question == null ? GONE : VISIBLE);
         bubble.setText(TopicVisuals.bubble(segment));
-        bindIndex(visuals.index, visuals.indexRising);
-        indexCaption.setText(visuals.indexCaption == null ? "" : "오늘의 주제 연동 지표인 " + visuals.indexCaption);
-        indexCaption.setVisibility(visuals.indexCaption == null ? GONE : VISIBLE);
+        bindLinkedIndicator(visuals.indicator);
+        indexCaption.setText(visuals.indicatorCaption == null ? "" : visuals.indicatorCaption);
+        indexCaption.setVisibility(visuals.indicator == null || visuals.indicatorCaption == null ? GONE : VISIBLE);
         startButton.setEnabled(segment != null);
         startButton.setAlpha(segment == null ? 0.5f : 1f);
         changeButton.setEnabled(canChangeTopic);
         changeButton.setAlpha(canChangeTopic ? 1f : 0.55f);
     }
 
-    /** Linked index card (example value); rebuilt only when the symbol changes (render() runs often). */
-    private void bindIndex(String symbol, boolean rising) {
-        if (java.util.Objects.equals(symbol, boundIndex) && Boolean.valueOf(rising).equals(boundRising)) return;
-        boundIndex = symbol;
-        boundRising = rising;
+    /** Card for the topic's linked indicator (same data as the home cards); rebuilt only when the kind changes. */
+    private void bindLinkedIndicator(IndicatorKind kind) {
+        if (kind == linkedKind && (kind == null || linkedCard != null)) return;
+        linkedKind = kind;
+        linkedCard = null;
         indexSlot.removeAllViews();
-        indexSlot.setVisibility(symbol == null ? GONE : VISIBLE);
-        if (symbol == null) return;
-        addExampleIndexCard(indexSlot, symbol, rising);
-        // Same width as one market card: the rest of the row stays empty.
-        LayoutParams params = (LayoutParams) indexSlot.getChildAt(0).getLayoutParams();
-        params.width = 0;
-        params.weight = 1f;
+        indexSlot.setVisibility(kind == null ? GONE : VISIBLE);
+        if (kind == null) return;
+        linkedCard = new IndicatorCard(kind);
+        MarketIndicator latest = latestIndicators.get(kind);
+        if (latest != null) linkedCard.bind(latest);
+        // Same width as one home card: the rest of the row stays empty.
+        indexSlot.addView(linkedCard.root, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         indexSlot.addView(new View(getContext()), new LayoutParams(0, 1, narrow ? 0.001f : 0.72f));
     }
 
@@ -347,42 +349,10 @@ final class PreDriveDashboard extends LinearLayout {
 
     /** Shows a lookup result (fresh, saved, or empty) on its home card. */
     void bindIndicator(MarketIndicator indicator) {
+        latestIndicators.put(indicator.getKind(), indicator);
         IndicatorCard card = indicatorCards.get(indicator.getKind());
         if (card != null) card.bind(indicator);
-    }
-
-    /** Linked index card with an example value (removed once topic indicators are connected). */
-    private void addExampleIndexCard(LinearLayout market, String symbol, boolean rising) {
-        LinearLayout card = column();
-        card.setPadding(size(18), size(16), size(18), size(14));
-        styleCard(card);
-        card.addView(text(symbol, 20, INK, true));
-
-        LinearLayout valueRow = row();
-        FrameLayout movement = new FrameLayout(getContext());
-        place(movement, picture(rising ? R.drawable.pre_drive_gain_circle : R.drawable.pre_drive_loss_circle),
-                31, 31, Gravity.CENTER);
-        ImageView arrow = picture(rising ? R.drawable.pre_drive_gain_arrow : R.drawable.pre_drive_loss_arrow);
-        if (!rising) arrow.setScaleY(-1);
-        place(movement, arrow, 15, 14, Gravity.CENTER);
-        valueRow.addView(movement, new LayoutParams(size(31), size(31)));
-        TextView value = text("0.05%", 26, INK, false);
-        value.setContentDescription(rising ? "0.05% 상승, 예시" : "0.05% 하락, 예시");
-        LayoutParams valueParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        valueParams.setMarginStart(size(6));
-        valueRow.addView(value, valueParams);
-
-        FrameLayout chart = new FrameLayout(getContext());
-        place(chart, picture(rising ? R.drawable.pre_drive_gain_fill : R.drawable.pre_drive_loss_fill),
-                88, rising ? 43 : 40, Gravity.TOP | Gravity.START);
-        place(chart, picture(rising ? R.drawable.pre_drive_gain_line : R.drawable.pre_drive_loss_line),
-                90, rising ? 42 : 32, Gravity.TOP | Gravity.START);
-        valueRow.addView(chart, new LayoutParams(size(90), size(43)));
-        card.addView(valueRow, rowParams(8));
-
-        LayoutParams params = new LayoutParams(0, size(115), 1f);
-        if (market.getChildCount() > 0) params.setMarginStart(size(34));
-        market.addView(card, params);
+        if (linkedCard != null && linkedKind == indicator.getKind()) linkedCard.bind(indicator);
     }
 
     private TextView action(String title, int color, int fill, Runnable click) {
