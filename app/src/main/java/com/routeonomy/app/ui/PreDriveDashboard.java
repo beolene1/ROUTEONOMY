@@ -27,6 +27,8 @@ final class PreDriveDashboard extends LinearLayout {
     private final boolean narrow;
     private final TextView topic;
     private TextView greetingTitle;
+    private ImageView heroMascot;
+    private int heroArt;
     private String stageName = "씨앗";
     private final TextView description;
     private final TextView status;
@@ -209,6 +211,13 @@ final class PreDriveDashboard extends LinearLayout {
         });
     }
 
+    /** Shows the character of the current growth stage next to the greeting. */
+    void setStageArt(int drawable) {
+        if (drawable == heroArt || heroMascot == null) return;
+        heroArt = drawable;
+        heroMascot.setImageResource(drawable);
+    }
+
     /** Greets with the current growth stage name, e.g. "씨앗님". */
     void setStageName(String name) {
         if (name.equals(stageName)) return;
@@ -240,7 +249,8 @@ final class PreDriveDashboard extends LinearLayout {
         copy.addView(text("오늘도 이동하는 시간을 성장의 시간으로 바꿔볼까요?", 25, MUTED, false),
                 rowParams(16));
         hero.addView(copy, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
-        ImageView mascot = picture(R.drawable.pre_drive_mascot);
+        ImageView mascot = picture(R.drawable.char_seed);
+        heroMascot = mascot;
         LayoutParams mascotParams = new LayoutParams(size(narrow ? 140 : 192), size(narrow ? 180 : 245));
         mascotParams.setMarginEnd(size(narrow ? 0 : 14));
         hero.addView(mascot, mascotParams);

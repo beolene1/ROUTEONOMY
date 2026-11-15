@@ -509,6 +509,7 @@ public final class MainActivity extends Activity {
         nowPlaying.setLevel(stageText(), (toNext == null ? "마지막 단계" : "다음 단계까지 " + toNext + "XP")
                 + "\n보유 " + progress.balance() + "XP");
         dashboard.setStageName(progress.stage().getLabel());
+        dashboard.setStageArt(StageArt.character(progress.stage()));
         String entered = briefing.enteredRegionId();
         RegionPrediction prediction = briefing.prediction();
         String mapRegion = entered != null ? entered : prediction != null ? prediction.getRegion().getId() : null;
@@ -612,6 +613,9 @@ public final class MainActivity extends Activity {
         com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
         summary.growthLine = (grown == null ? "" : grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요! ")
                 + (next == null ? "마지막 단계에 도착했어요!" : "다음 단계 '" + next.getLabel() + "'까지 " + toNext + "XP 남았어요!");
+        summary.heroArt = grown != null ? StageArt.levelUp(grown) : StageArt.character(stage);
+        summary.nowArt = StageArt.character(stage);
+        summary.nextArt = StageArt.character(next != null ? next : stage);
         summary.stageEarned = progress.earnedTotal() - stage.getMinPoints();
         summary.stageNeeded = next == null ? 0 : next.getMinPoints() - stage.getMinPoints();
         QuizSession offer = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds());

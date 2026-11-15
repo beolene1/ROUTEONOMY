@@ -27,6 +27,10 @@ final class ArrivalScreen extends LinearLayout {
         int studyMinutes;
         int heardCount;
         int earnedThisRun;
+        /** Pictures: greeting (level-up art when the stage rose this drive), current and next stage. */
+        int heroArt;
+        int nowArt;
+        int nextArt;
         /** e.g. "다음 단계 '줄기'까지 20XP 남았어요!" */
         String growthLine;
         /** XP earned inside the current stage and XP the stage needs (0 at the last stage). */
@@ -50,6 +54,10 @@ final class ArrivalScreen extends LinearLayout {
     private final TextView growthLine;
     private final TextView earned;
     private GrowthBar growthBar;
+    private android.widget.ImageView heroMascot;
+    private android.widget.ImageView nowMascot;
+    private android.widget.ImageView nextMascot;
+    private final int[] boundArt = new int[3];
     private final TextView quizNote;
     private final TextView quizButton;
     private String boundKeywords;
@@ -68,7 +76,8 @@ final class ArrivalScreen extends LinearLayout {
         FrameLayout.LayoutParams mascotParams = new FrameLayout.LayoutParams(style.size(320), style.size(270),
                 Gravity.END | Gravity.CENTER_VERTICAL);
         mascotParams.rightMargin = -style.size(36);
-        hero.addView(style.picture(R.drawable.arrival_mascot), mascotParams);
+        heroMascot = style.picture(R.drawable.char_seed);
+        hero.addView(heroMascot, mascotParams);
         LinearLayout copy = new LinearLayout(context);
         copy.setOrientation(VERTICAL);
         greeting = style.text("", 56, UiStyle.INK, true);
@@ -127,6 +136,9 @@ final class ArrivalScreen extends LinearLayout {
     void bind(Summary s) {
         String text = "도착했어요,\n" + s.stageName + "님 수고하셨어요!";
         if (!text.contentEquals(greeting.getText())) greeting.setText(text);
+        setArt(heroMascot, 0, s.heroArt);
+        setArt(nowMascot, 1, s.nowArt);
+        setArt(nextMascot, 2, s.nextArt);
         String keys = String.join("|", s.keywords);
         if (!keys.equals(boundKeywords)) {
             boundKeywords = keys;
@@ -149,6 +161,12 @@ final class ArrivalScreen extends LinearLayout {
                 : "+" + s.quizXp + " XP" + (s.quizCanLevelUp ? " · 레벨업 가능!" : " 획득 가능!"));
         quizButton.setEnabled(s.hasQuiz);
         quizButton.setAlpha(s.hasQuiz ? 1f : 0.45f);
+    }
+
+    private void setArt(android.widget.ImageView view, int slot, int drawable) {
+        if (drawable == 0 || boundArt[slot] == drawable) return; // bind() runs on every render
+        boundArt[slot] = drawable;
+        view.setImageResource(drawable);
     }
 
     /** Current-stage mascot, "+N XP", the stage progress bar and the next-stage mascot. */
@@ -174,9 +192,11 @@ final class ArrivalScreen extends LinearLayout {
         xpParams.topMargin = style.size(6);
         panel.addView(xp, xpParams);
 
-        panel.addView(style.picture(R.drawable.growth_now), new FrameLayout.LayoutParams(style.size(137), style.size(178),
+        nowMascot = style.picture(R.drawable.char_seed);
+        panel.addView(nowMascot, new FrameLayout.LayoutParams(style.size(137), style.size(178),
                 Gravity.BOTTOM | Gravity.START));
-        panel.addView(style.picture(R.drawable.growth_next), new FrameLayout.LayoutParams(style.size(153), style.size(205),
+        nextMascot = style.picture(R.drawable.char_sprout);
+        panel.addView(nextMascot, new FrameLayout.LayoutParams(style.size(153), style.size(205),
                 Gravity.BOTTOM | Gravity.END));
         return panel;
     }
