@@ -78,6 +78,9 @@ class PlayerProgress(private val store: ProgressStore) {
     fun stage(): GrowthStage = GrowthStage.of(earned)
     /** Points still needed for the next stage; null at the last stage. */
     fun pointsToNextStage(): Int? = stage().next?.let { it.minPoints - earned }
+    /** Stage when this run (drive) started. */
+    fun stageAtStartOfRun(): GrowthStage = stageAtStart
+
     /** The stage reached during this run, or null when it did not change. */
     fun stageReachedThisRun(): GrowthStage? = stage().takeIf { it != stageAtStart }
 
@@ -94,6 +97,9 @@ class PlayerProgress(private val store: ProgressStore) {
         quizPointsThisRun += points
         return points
     }
+
+    /** True once the question of [segmentId] earned its answer reward this run (repeat answers earn nothing). */
+    fun isQuizAnswerRewarded(segmentId: String): Boolean = segmentId in answeredQuestions
 
     fun isHintPaid(segmentId: String): Boolean = segmentId in paidHints
     fun canShowHint(segmentId: String): Boolean = isHintPaid(segmentId) || balance >= PointRules.HINT_COST

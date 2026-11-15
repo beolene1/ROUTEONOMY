@@ -16,6 +16,7 @@ import com.routeonomy.app.data.AssetQuizRepository;
 import com.routeonomy.app.data.AssetRouteRepository;
 import com.routeonomy.app.data.AssetSegmentRepository;
 import com.routeonomy.app.data.PrefsProgressStore;
+import com.routeonomy.app.data.PrefsReviewStore;
 import com.routeonomy.app.domain.BriefingSegment;
 import com.routeonomy.app.domain.BriefingSession;
 import com.routeonomy.app.domain.DriveSession;
@@ -61,6 +62,7 @@ public final class MainActivity extends Activity {
     private ScrollView dashboardScroll;
     private ScrollView briefingScroll;
     private boolean toolsOpen;
+    private boolean detailsOpen; // P: script, discoveries, quiz entry and location under the Now Playing screen
     private boolean ttsReady;
     private String ttsProblem; // init failure / service not connected, shown until TTS is ready
     private String ttsError;   // last speech error, shown until playback restarts
@@ -79,6 +81,7 @@ public final class MainActivity extends Activity {
     private RouteMapView routeMap;
     private LinearLayout screen;
     private FrameLayout appArea;
+    private FigmaFrame appFrame; // scales the app column to the Figma proportions
     private int dashboardWidthDp = -1;
     private boolean simulationOpen;
     private LinearLayout demoMovePanel;
@@ -89,11 +92,23 @@ public final class MainActivity extends Activity {
     private boolean quizEmptyNotice;
     private String renderedQuizKey;
     private QuizScreen quizScreen;
-    private ArrivalPopup arrivalPopup;
+    // S3 arrival summary (arrived and in P) and the pick-one popup (P1 topic choice / P3 review).
+    private ArrivalScreen arrivalScreen;
+    private ScrollView arrivalScroll;
+    private boolean arrivalHidden; // grid / tools on the arrival screen show the briefing screen instead
+    private ChoicePopup choicePopup;
+    private TextView appToast;
+    // P2: shown once per stage reached, at the end of the drive (user flow: S5 or S3 → 레벨업? → P2 → P3).
+    private LevelUpPopup levelUpPopup;
+    private com.routeonomy.app.domain.GrowthStage celebratedStage;
+    private final Runnable hideAppToast = () -> appToast.animate().alpha(0f).setDuration(300)
+            .withEndAction(() -> appToast.setVisibility(View.GONE)).start();
+    private boolean topicChoiceOpen; // which use of choicePopup is showing: topic choice (home) or review (arrival/quiz)
+    private PrefsReviewStore reviewStore;
     private ConfirmPopup homeConfirm;
     // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
     private boolean homeShown;
-    private boolean arrivalCelebrated; // the popup is shown once per app run
+    private boolean arrivalCelebrated; // arrival opens its screen once per arrival
     private ScrollView quizScroll;
     // Points given for the last submitted answer, for the quiz feedback line.
     private QuizSession awardQuiz;
@@ -144,6 +159,7 @@ public final class MainActivity extends Activity {
         briefing = new BriefingSession(segments, regions, trip.getDestination().getLocation(), currentLocation,
                 session.etaMinutes(), speaker, () -> android.os.SystemClock.elapsedRealtime());
         progress = new PlayerProgress(new PrefsProgressStore(this));
+        reviewStore = new PrefsReviewStore(this);
         briefing.setCompletionListener(segment -> {
             progress.rewardSegment(segment.getId(), segment.getType());
             return kotlin.Unit.INSTANCE;
@@ -177,10 +193,13 @@ public final class MainActivity extends Activity {
         briefingScroll = new ScrollView(this);
         briefingScroll.setFillViewport(true);
         LinearLayout root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(style.size(28),style.size(24),style.size(28),style.size(24)); root.setBackgroundColor(UiStyle.BACKGROUND); briefingScroll.addView(root);
+        // Figma dp padding (FigmaFrame scales the column).
+        root.setPadding(style.size(40),style.size(41),style.size(40),style.size(48));
+        root.setBackgroundColor(UiStyle.BACKGROUND);
+        briefingScroll.addView(root);
         nowPlaying = new NowPlayingCard(this, this::requestHome, this::togglePlayback,
-                this::previousTopic, this::nextTopic, this::toggleSimulationFromCard);
-        root.addView(nowPlaying, full());
+                this::previousTopic, this::nextTopic, this::toggleSimulationFromCard, this::toggleDetails);
+        root.addView(nowPlaying, new LinearLayout.LayoutParams(-1, 0, 1f)); // fills the column: buttons at the bottom
         playbackStatus = nowPlaying.playbackStatusView();
         // P only: script, discoveries, quiz entry and tools below the Now Playing card.
         details=infoCard(style); discoveries=infoCard(style);
@@ -197,9 +216,9 @@ public final class MainActivity extends Activity {
         simulationPanel.addView(gears);
         // Demo only (video): set the points before recording so a stage-up can be shown.
         LinearLayout pointControls=new LinearLayout(this);
-        Button addPoints=button("포인트 +100"); addPoints.setOnClickListener(v->{progress.addDemoPoints(100);render();}); pointControls.addView(addPoints,weight());
+        Button addPoints=button("XP +100"); addPoints.setOnClickListener(v->{progress.addDemoPoints(100);render();}); pointControls.addView(addPoints,weight());
         Button nearNext=button("다음 단계 직전"); nearNext.setOnClickListener(v->{progress.moveNearNextStage();render();}); pointControls.addView(nearNext,weight());
-        Button resetPoints=button("포인트 초기화"); resetPoints.setOnClickListener(v->{progress.resetAll();render();}); pointControls.addView(resetPoints,weight());
+        Button resetPoints=button("XP 초기화"); resetPoints.setOnClickListener(v->{progress.resetAll();render();}); pointControls.addView(resetPoints,weight());
         simulationPanel.addView(pointControls);
         // Demo-only movement row. It is the one simulation control kept on the driving screen.
         demoMovePanel=new LinearLayout(this); demoMovePanel.setOrientation(LinearLayout.VERTICAL);
@@ -213,8 +232,9 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizScreen = new QuizScreen(this, this::requestHome, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext);
-        quizScreen.setPadding(style.size(28), style.size(24), style.size(28), style.size(24));
+        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext, this::openReviewFlow,
+                this::goHome);
+        quizScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         quizScroll = new ScrollView(this);
         quizScroll.setFillViewport(true);
         quizScroll.setBackgroundColor(UiStyle.BACKGROUND);
@@ -227,14 +247,36 @@ public final class MainActivity extends Activity {
         appArea.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(quizScroll, new FrameLayout.LayoutParams(-1, -1));
-        arrivalPopup = new ArrivalPopup(this, () -> {
-            arrivalPopup.hide();
-            startQuiz();
-        }, () -> { arrivalPopup.hide(); updateBackCallback(); });
-        appArea.addView(arrivalPopup, new FrameLayout.LayoutParams(-1, -1));
+        arrivalScreen = new ArrivalScreen(this, this::openReviewFlow, this::startQuiz, this::openSimulationFromArrival,
+                this::showDetailsFromArrival);
+        arrivalScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
+        arrivalScroll = new ScrollView(this);
+        arrivalScroll.setFillViewport(true);
+        arrivalScroll.setBackgroundColor(UiStyle.BACKGROUND);
+        arrivalScroll.addView(arrivalScreen);
+        arrivalScroll.setVisibility(View.GONE);
+        appArea.addView(arrivalScroll, new FrameLayout.LayoutParams(-1, -1));
+        choicePopup = new ChoicePopup(this);
+        appArea.addView(choicePopup, new FrameLayout.LayoutParams(-1, -1));
+        levelUpPopup = new LevelUpPopup(this);
+        appArea.addView(levelUpPopup, new FrameLayout.LayoutParams(-1, -1));
+        // In-app toast (the system toast is easy to miss on the car screen).
+        appToast = style.text("", 22, android.graphics.Color.WHITE, true);
+        appToast.setGravity(android.view.Gravity.CENTER);
+        appToast.setPadding(style.size(32), style.size(18), style.size(32), style.size(18));
+        appToast.setBackground(style.shape(0xe6256a49, 32));
+        appToast.setElevation(style.size(12));
+        appToast.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        appToast.setVisibility(View.GONE);
+        FrameLayout.LayoutParams toastParams = new FrameLayout.LayoutParams(-2, -2,
+                android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+        toastParams.bottomMargin = style.size(140);
+        appArea.addView(appToast, toastParams);
         homeConfirm = new ConfirmPopup(this, "홈 화면으로 갈까요?",
                 "홈 화면으로 가면 음성 재생이 멈춥니다.\n그래도 홈으로 가시겠습니까?", "뒤로가기");
         appArea.addView(homeConfirm, new FrameLayout.LayoutParams(-1, -1));
+        appFrame = new FigmaFrame(this);
+        appFrame.addView(appArea);
         routeMap = new RouteMapView(this);
         routeMap.setRoute(routePoints, trip.getCurrent(), trip.getDestination(), regions);
         screen = new LinearLayout(this);
@@ -243,7 +285,7 @@ public final class MainActivity extends Activity {
     }
 
     private static final int WIDE_WINDOW_DP = 1200;
-    private static final float MAP_SHARE = 0.45f;
+    private static final float MAP_SHARE = 0.43f; // Figma: 722 of the 1682 dp frame
     /** Full window: route panel left, app right. Narrower (e.g. half split): route panel on top. */
     private void applyLayout() {
         int widthDp = getResources().getConfiguration().screenWidthDp;
@@ -252,19 +294,20 @@ public final class MainActivity extends Activity {
         screen.setOrientation(wide ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         if (wide) {
             screen.addView(routeMap, new LinearLayout.LayoutParams(0, -1, MAP_SHARE));
-            screen.addView(appArea, new LinearLayout.LayoutParams(0, -1, 1 - MAP_SHARE));
+            screen.addView(appFrame, new LinearLayout.LayoutParams(0, -1, 1 - MAP_SHARE));
         } else {
-            int mapHeight = Math.round(400 * getResources().getDisplayMetrics().density);
+            int mapHeight = Math.round(300 * getResources().getDisplayMetrics().density);
             screen.addView(routeMap, new LinearLayout.LayoutParams(-1, mapHeight));
-            screen.addView(appArea, new LinearLayout.LayoutParams(-1, 0, 1));
+            screen.addView(appFrame, new LinearLayout.LayoutParams(-1, 0, 1));
         }
-        int appWidthDp = wide ? Math.round(widthDp * (1 - MAP_SHARE)) : widthDp;
+        int appWidthDp = Math.round(FigmaFrame.DESIGN_WIDTH_DP); // screens are laid out in Figma dp
         if (appWidthDp == dashboardWidthDp) return;
         // The dashboard sizes itself once at construction; rebuild it for the new column width.
         dashboardWidthDp = appWidthDp;
         dashboardScroll.removeAllViews();
         dashboard = new PreDriveDashboard(this, appWidthDp, this::startDashboardBriefing,
-                () -> shiftDashboardTopic(1), () -> shiftDashboardTopic(-1), () -> openTools(true), () -> openTools(false));
+                () -> shiftDashboardTopic(1), () -> shiftDashboardTopic(-1), this::openTopicChoice,
+                () -> openTools(true), () -> openTools(false));
         dashboardScroll.addView(dashboard);
         if (!ttsReady && ttsProblem != null) dashboard.showStatus(ttsProblem); // keep a TTS failure notice
     }
@@ -274,6 +317,12 @@ public final class MainActivity extends Activity {
         debugToggleButton.setText(simulationOpen ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
         render();
         if (simulationOpen) briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, debugToggleButton.getTop()));
+    }
+
+    private void toggleDetails() {
+        detailsOpen = !detailsOpen;
+        render();
+        if (detailsOpen) briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, details.getTop()));
     }
 
     private void togglePlayback() {
@@ -297,6 +346,11 @@ public final class MainActivity extends Activity {
 
     /** Home button / system back on the briefing screen: confirm first when audio is in progress. */
     private void requestHome() {
+        if (session.canStartQuiz() && arrivalHidden) { // arrived: the briefing screen was opened over S3
+            arrivalHidden = false;
+            render();
+            return;
+        }
         if (briefing.isPlaying()) { homeConfirm.show(this::goHome); updateBackCallback(); }
         else goHome();
     }
@@ -315,7 +369,8 @@ public final class MainActivity extends Activity {
     private boolean backRegistered;
     private void updateBackCallback() {
         if (android.os.Build.VERSION.SDK_INT < 33) return;
-        boolean want = homeConfirm.isShowing() || arrivalPopup.isShowing() || dashboardScroll.getVisibility() != View.VISIBLE;
+        boolean want = homeConfirm.isShowing() || choicePopup.isShowing() || levelUpPopup.isShowing()
+                || dashboardScroll.getVisibility() != View.VISIBLE;
         if (want == backRegistered) return;
         if (backCallback == null) backCallback = (android.window.OnBackInvokedCallback) this::onSystemBack;
         android.window.OnBackInvokedDispatcher dispatcher = getOnBackInvokedDispatcher();
@@ -326,7 +381,8 @@ public final class MainActivity extends Activity {
     }
     private void onSystemBack() {
         if (homeConfirm.isShowing()) homeConfirm.hide();
-        else if (arrivalPopup.isShowing()) arrivalPopup.hide();
+        else if (choicePopup.isShowing()) choicePopup.hide();
+        else if (levelUpPopup.isShowing()) closeLevelUp();
         else if (dashboardScroll.getVisibility() == View.VISIBLE) moveTaskToBack(true); // already home
         else if (quiz != null && !quizHidden) closeQuiz();
         else requestHome();
@@ -342,6 +398,7 @@ public final class MainActivity extends Activity {
     private void openTools(boolean showSimulation) {
         setHomeShown(false);
         toolsOpen = true;
+        detailsOpen = true;
         simulationOpen = showSimulation;
         debugToggleButton.setText(showSimulation ? "시뮬레이션 입력 닫기" : "시뮬레이션 입력 열기");
         render();
@@ -363,7 +420,7 @@ public final class MainActivity extends Activity {
         render();
     }
 
-    private void addMoveButton(Place stop){Button b=button(stop.getName()+"(으)로 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
+    private void addMoveButton(Place stop){Button b=button(stop.getName()+LevelUpPopup.particleRo(stop.getName())+" 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
     private void onRealLocation(GeoPoint point) {
@@ -447,18 +504,19 @@ public final class MainActivity extends Activity {
         briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
         nowPlaying.setDriving(driving);
         BriefingSegment current = briefing.currentSegment();
-        List<BriefingSegment> topics = briefing.dashboardTopics();
         BriefingSegment shownTopic = briefing.dashboardTopic();
-        dashboard.bindTopic(shownTopic, briefing.canChangeDashboardTopic(), Math.max(0, topics.indexOf(shownTopic)), topics.size());
+        dashboard.bindTopic(shownTopic, briefing.canChangeDashboardTopic());
         String route = routeStatusText();
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
         float tripProgress = 1f - driveLeft / (float) Math.max(1, trip.getRemainingMinutes());
-        nowPlaying.bind(current, firstSentence(current), (int) (briefing.studyMillis() / 60_000), driveLeft, tripProgress);
+        String hook = TopicVisuals.of(current).question;
+        nowPlaying.bind(current, hook != null ? hook : firstSentence(current), (int) (briefing.studyMillis() / 60_000), driveLeft, tripProgress);
         Integer toNext = progress.pointsToNextStage();
-        nowPlaying.setLevel(stageText(), (toNext == null ? "마지막 단계" : "다음 단계까지 " + toNext + "P")
-                + " · 보유 " + progress.balance() + "P");
+        nowPlaying.setLevel(stageText(), (toNext == null ? "마지막 단계" : "다음 단계까지 " + toNext + "XP")
+                + "\n보유 " + progress.balance() + "XP");
         dashboard.setStageName(progress.stage().getLabel());
+        dashboard.setStageArt(StageArt.character(progress.stage()));
         String entered = briefing.enteredRegionId();
         RegionPrediction prediction = briefing.prediction();
         String mapRegion = entered != null ? entered : prediction != null ? prediction.getRegion().getId() : null;
@@ -466,37 +524,43 @@ public final class MainActivity extends Activity {
                 route.substring(route.indexOf('\n') + 1),
                 locationSourceStatus + " · " + trip.getDestination().getName() + "까지 " + session.etaMinutes() + "분");
         locationStatus.setText(locationStatusText());
-        locationStatus.setVisibility(driving?View.GONE:View.VISIBLE);
+        boolean showDetails = !driving && (detailsOpen || simulationOpen);
+        locationStatus.setVisibility(showDetails?View.VISIBLE:View.GONE);
         details.setText(current == null ? "브리핑 원고 없음" : "원고\n" + current.getScript() + "\n\n새 용어 · " + current.getTerm().getName() + "\n" + current.getTerm().getExplanation());
-        details.setVisibility(driving?View.GONE:View.VISIBLE);
+        details.setVisibility(showDetails?View.VISIBLE:View.GONE);
         discoveries.setText(discoveryText());
-        discoveries.setVisibility(driving?View.GONE:View.VISIBLE);
-        debugToggleButton.setVisibility(driving?View.GONE:View.VISIBLE);
+        discoveries.setVisibility(showDetails?View.VISIBLE:View.GONE);
+        debugToggleButton.setVisibility(showDetails?View.VISIBLE:View.GONE);
         simulationPanel.setVisibility(simulationOpen && !driving ? View.VISIBLE : View.GONE);
         // Demo-only: the movement row stays available in D so the region switch can be shown while driving.
         demoMovePanel.setVisibility(simulationOpen ? View.VISIBLE : View.GONE);
         boolean quizAllowed = session.canStartQuiz();
+        // The pick-one popup must not outlive its screen (it swallows taps), e.g. after shifting to D.
+        if (choicePopup.isShowing() && (driving || (topicChoiceOpen
+                ? !showDashboard || !briefing.canChangeDashboardTopic() : !quizAllowed))) choicePopup.hide();
+        if (levelUpPopup.isShowing() && (driving || !quizAllowed)) levelUpPopup.hide();
         if (!quizAllowed) {
-            quiz = null; quizEmptyNotice = false; arrivalPopup.hide(); // left P or arrival was cleared: stop the quiz
-            // A cleared (simulated) arrival must not use up the popup of the real arrival.
+            quiz = null; quizEmptyNotice = false; // left P or arrival was cleared: stop the quiz
+            arrivalHidden = false;
+            // A cleared (simulated) arrival must not use up the screen of the real arrival.
             if (session.arrival() != DriveSession.Arrival.ARRIVED) arrivalCelebrated = false;
         }
         else if (!arrivalCelebrated) {
-            // First time arrival and P hold together: praise, then offer the quiz.
+            // First time arrival and P hold together: the arrival summary replaces the current screen.
             arrivalCelebrated = true;
-            com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
-            arrivalPopup.show(briefing.completedSegmentIds().size(),
-                    !QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds()).isEmpty(),
-                    "이번 주행 +" + progress.earnedThisRun() + " 포인트 · 지금 " + stageText()
-                            + (grown == null ? "" : "\n" + grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요!"));
+            arrivalHidden = false;
+            briefing.pause(); // S3 has no playback controls
+            if (homeShown) setHomeShown(false);
+            arrivalScroll.scrollTo(0, 0);
         }
-        quizButton.setVisibility(driving || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
+        quizButton.setVisibility(!showDetails || (quiz != null && !quizHidden) ? View.GONE : View.VISIBLE);
         quizButton.setText(quiz != null && quizHidden && !quiz.isFinished() ? "퀴즈 이어 풀기" : "도착 후 퀴즈 시작");
-        quizStatus.setVisibility(driving?View.GONE:View.VISIBLE);
+        quizStatus.setVisibility(showDetails?View.VISIBLE:View.GONE);
         quizButton.setEnabled(quizAllowed);
         if (quiz == null || quizHidden) quizStatus.setText(!quizAllowed ? "P단이어도 목적지 도착 전에는 퀴즈를 시작할 수 없습니다."
                 : quizEmptyNotice ? "아직 끝까지 들은 브리핑이 없어 풀 수 있는 퀴즈가 없습니다." : "목적지 도착 확인 · 정차 중 퀴즈 가능");
         renderQuiz();
+        renderArrival(quizAllowed);
         playbackStatus.setText(playbackText());
         nowPlaying.setPlaying(briefing.isPlaying());
         updateBackCallback();
@@ -521,11 +585,141 @@ public final class MainActivity extends Activity {
     }
     private void openSimulationFromQuiz(){
         quizHidden = true;
+        arrivalHidden = true;
         if (!simulationOpen) toggleSimulationFromCard(); else render();
     }
     private void closeQuiz(){
         quizHidden = true;
+        arrivalHidden = false; // back to the arrival summary
         render();
+    }
+
+    /** S3: shown while arrived and in P, unless the quiz, home or the briefing screen was opened over it. */
+    private void renderArrival(boolean quizAllowed) {
+        boolean show = quizAllowed && !arrivalHidden && !homeShown && !(quiz != null && !quizHidden);
+        arrivalScroll.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (!show) return;
+        briefingScroll.setVisibility(View.GONE);
+        dashboardScroll.setVisibility(View.GONE);
+        ArrivalScreen.Summary summary = new ArrivalScreen.Summary();
+        com.routeonomy.app.domain.GrowthStage stage = progress.stage();
+        com.routeonomy.app.domain.GrowthStage next = stage.getNext();
+        summary.stageName = stage.getLabel();
+        List<BriefingSegment> heard = TodayDiscoveries.from(segments, briefing.completedSegmentIds());
+        for (BriefingSegment s : heard) {
+            String index = TopicVisuals.of(s).index;
+            for (String key : new String[] {s.getKeywords().isEmpty() ? null : s.getKeywords().get(0), index}) {
+                if (key == null) continue;
+                String tag = key.replace(" ", "");
+                if (!summary.keywords.contains(tag) && summary.keywords.size() < 5) summary.keywords.add(tag);
+            }
+        }
+        summary.studyMinutes = (int) (briefing.studyMillis() / 60_000);
+        summary.heardCount = heard.size();
+        summary.earnedThisRun = progress.earnedThisRun();
+        Integer toNext = progress.pointsToNextStage();
+        com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
+        summary.growthLine = (grown == null ? "" : grown.getEmoji() + " " + grown.getLabel() + LevelUpPopup.particleRo(grown.getLabel()) + " 자랐어요! ")
+                + (next == null ? "마지막 단계에 도착했어요!" : "다음 단계 '" + next.getLabel() + "'까지 " + toNext + "XP 남았어요!");
+        summary.heroArt = StageArt.arrival(stage);
+        summary.nowArt = StageArt.character(stage);
+        summary.nextArt = StageArt.character(next != null ? next : stage);
+        summary.stageEarned = progress.earnedTotal() - stage.getMinPoints();
+        summary.stageNeeded = next == null ? 0 : next.getMinPoints() - stage.getMinPoints();
+        QuizSession offer = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds());
+        int unrewarded = 0;
+        for (QuizQuestion q : offer.getQuestions()) if (!progress.isQuizAnswerRewarded(q.getSegmentId())) unrewarded++;
+        summary.hasQuiz = !offer.isEmpty();
+        summary.quizXp = unrewarded * com.routeonomy.app.domain.PointRules.QUIZ_CORRECT;
+        summary.quizCanLevelUp = toNext != null && summary.quizXp >= toNext;
+        arrivalScreen.bind(summary);
+    }
+
+    private void showDetailsFromArrival() {
+        arrivalHidden = true;
+        detailsOpen = true;
+        render();
+    }
+
+    private void openSimulationFromArrival() {
+        arrivalHidden = true;
+        if (!simulationOpen) toggleSimulationFromCard(); else render();
+    }
+
+    /** P3 "오늘 이야기는 어땠나요?": saved on the device; voice input is not built yet. */
+    private void openReview() {
+        List<CharSequence> options = new ArrayList<>();
+        for (com.routeonomy.app.domain.LessonReview review : com.routeonomy.app.domain.LessonReview.values()) {
+            options.add(reviewRow(review.getEmoji(), review.getLabel(), review.getPromise()));
+        }
+        options.add(reviewRow("🎙️", "음성으로 말하기", "자유롭게 의견을 들려주세요"));
+        final int voice = options.size() - 1;
+        topicChoiceOpen = false;
+        choicePopup.show("오늘 이야기는 어땠나요?", options, false, -1, true, "Send today’s feedback", "Skip",
+                new ChoicePopup.Handler() {
+                    @Override public boolean onPick(int index) {
+                        if (index != voice) return true;
+                        choicePopup.showNotice("🎙️ 음성으로 말하기는 준비 중이에요.\n"
+                                + "앞으로 Pleos SDK와 연결해, 음성으로 오늘의 콘텐츠와 난이도에 대한 의견을 보내는 기능을\n"
+                                + "개발할 예정입니다.");
+                        return false;
+                    }
+                    @Override public void onPrimary(int selected) {
+                        reviewStore.save(com.routeonomy.app.domain.LessonReview.values()[selected]);
+                        choicePopup.hide();
+                        showAppToast("✓  오늘의 리뷰가 저장되었어요. 고마워요!");
+                        updateBackCallback();
+                    }
+                    @Override public void onSecondary() { choicePopup.hide(); updateBackCallback(); }
+                });
+        updateBackCallback();
+    }
+
+    /** Short message over the app column that fades out by itself. */
+    private void showAppToast(String message) {
+        appToast.removeCallbacks(hideAppToast);
+        appToast.animate().cancel();
+        appToast.setText(message);
+        appToast.setAlpha(0f);
+        appToast.setVisibility(View.VISIBLE);
+        appToast.animate().alpha(1f).setDuration(200).start();
+        appToast.postDelayed(hideAppToast, 2500);
+    }
+
+    private CharSequence reviewRow(String emoji, String label, String promise) {
+        android.text.SpannableStringBuilder row = new android.text.SpannableStringBuilder(emoji + " ");
+        int start = row.length();
+        row.append(label);
+        row.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, row.length(), 0);
+        row.setSpan(new android.text.style.RelativeSizeSpan(1.2f), start, row.length(), 0);
+        start = row.length();
+        row.append("   ").append(promise);
+        row.setSpan(new android.text.style.RelativeSizeSpan(0.8f), start, row.length(), 0);
+        return row;
+    }
+
+    /** P1 "원하는 토픽을 선택해보세요!": the unheard topics plus a random pick; Start begins with the choice. */
+    private void openTopicChoice() {
+        if (!briefing.canChangeDashboardTopic()) return;
+        final List<BriefingSegment> topics = briefing.dashboardTopics();
+        List<CharSequence> options = new ArrayList<>();
+        for (BriefingSegment topic : topics) options.add(topic.getTopic());
+        options.add("여러 주제로 랜덤플레이");
+        topicChoiceOpen = true;
+        choicePopup.show("원하는 토픽을 선택해보세요!", options, true, topics.indexOf(briefing.dashboardTopic()), true,
+                "Start today’s learning", "Back", new ChoicePopup.Handler() {
+                    @Override public boolean onPick(int index) { return true; }
+                    @Override public void onPrimary(int selected) {
+                        int pick = selected < topics.size() ? selected : new java.util.Random().nextInt(topics.size());
+                        int shown = Math.max(0, topics.indexOf(briefing.dashboardTopic()));
+                        if (pick != shown) briefing.shiftDashboardTopic(pick - shown);
+                        choicePopup.hide();
+                        startDashboardBriefing();
+                        render();
+                    }
+                    @Override public void onSecondary() { choicePopup.hide(); updateBackCallback(); }
+                });
+        updateBackCallback();
     }
     private void onQuizAnswer(int choice){
         if (quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
@@ -539,8 +733,44 @@ public final class MainActivity extends Activity {
     private void onQuizNext(){
         if (quiz == null) return;
         if (quiz.isFinished()) { quiz.restart(); awardQuiz = null; }
-        else if (quiz.isAnswered()) quiz.next();
+        else if (quiz.isAnswered()) {
+            quiz.next();
+            // S5 quiz result → 레벨업? → P2 (its 오늘의 정리 opens P3).
+            if (quiz.isFinished() && pendingLevelUp() != null) quizScroll.postDelayed(() -> {
+                if (quiz != null && quiz.isFinished() && !quizHidden) showLevelUp(true);
+            }, 450);
+        }
         renderQuiz();
+    }
+
+    /** Stage reached this drive and not celebrated yet, or null. */
+    private com.routeonomy.app.domain.GrowthStage pendingLevelUp() {
+        com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
+        return grown == null || grown == celebratedStage ? null : grown;
+    }
+
+    /** 오늘의 정리 (S3 Review lesson, quiz result): a pending level-up first (P2), then the review (P3). */
+    private void openReviewFlow() {
+        if (pendingLevelUp() != null) showLevelUp(true);
+        else openReview();
+    }
+
+    private void showLevelUp(boolean thenReview) {
+        com.routeonomy.app.domain.GrowthStage grown = pendingLevelUp();
+        if (grown == null || levelUpPopup.isShowing()) return;
+        choicePopup.hide();
+        levelUpPopup.show(progress.stageAtStartOfRun(), grown, progress.earnedTotal(), progress.pointsToNextStage(),
+                StageArt.levelUp(grown), () -> {
+                    closeLevelUp();
+                    if (thenReview) openReview();
+                }, this::closeLevelUp);
+        updateBackCallback();
+    }
+
+    private void closeLevelUp() {
+        celebratedStage = progress.stageReachedThisRun();
+        levelUpPopup.hide();
+        updateBackCallback();
     }
     private void renderQuiz(){
         boolean showQuiz = quiz != null && !quizHidden && !homeShown;
@@ -566,7 +796,7 @@ public final class MainActivity extends Activity {
             return quiz == awardQuiz && quiz != null && quiz.position() == awardPosition ? awardPoints : 0;
         }
         @Override public String resultLine() {
-            return "이번 퀴즈 +" + progress.quizPointsThisRun() + " 포인트 · 지금 " + stageText();
+            return "이번 퀴즈 +" + progress.quizPointsThisRun() + " XP · 지금 " + stageText();
         }
     };
     /** e.g. "🌱 새싹 Lv.2". */
