@@ -89,7 +89,8 @@ final class PreDriveDashboard extends LinearLayout {
         // Speech bubble art (tail at the bottom right, toward the mascot); text sits inside the oval.
         int bubbleSize = narrow ? 190 : 245;
         // Equal top/bottom insets put the text in the middle of the oval (the tail sits below it).
-        bubble.setPadding(size(bubbleSize * 0.13f), size(bubbleSize * 0.27f), size(bubbleSize * 0.09f), size(bubbleSize * 0.27f));
+        // Narrower text box: longer lines wrap into up to three lines inside the oval instead of touching its edge.
+        bubble.setPadding(size(bubbleSize * 0.18f), size(bubbleSize * 0.27f), size(bubbleSize * 0.15f), size(bubbleSize * 0.27f));
         bubble.setBackgroundResource(R.drawable.home_bubble);
         bubble.setMaxLines(3);
         bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -99,7 +100,7 @@ final class PreDriveDashboard extends LinearLayout {
         // left and up (into the free space above the section title) so the mascot does not cover it.
         buddy.setClipChildren(false);
         place(buddy, picture(R.drawable.home_study_mascot), narrow ? 130 : 190, narrow ? 131 : 191, Gravity.BOTTOM | Gravity.END);
-        bubble.setTranslationX(-size(bubbleSize * 0.3f));
+        bubble.setTranslationX(-size(bubbleSize * 0.18f));
         bubble.setTranslationY(-size(24));
         buddy.addView(bubble, bubbleParams);
         topicHead.addView(buddy, new LayoutParams(0, size(narrow ? 190 : 245), 1f));
