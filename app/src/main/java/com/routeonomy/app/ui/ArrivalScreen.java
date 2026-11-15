@@ -29,8 +29,9 @@ final class ArrivalScreen extends LinearLayout {
         int earnedThisRun;
         /** e.g. "다음 단계 '줄기'까지 20XP 남았어요!" */
         String growthLine;
-        /** 0..1 progress inside the current stage. */
-        float stageShare;
+        /** XP earned inside the current stage and XP the stage needs (0 at the last stage). */
+        int stageEarned;
+        int stageNeeded;
         /** XP the quiz can still give, 0 when there is no quiz. */
         int quizXp;
         boolean quizCanLevelUp;
@@ -48,8 +49,7 @@ final class ArrivalScreen extends LinearLayout {
     private final TextView record;
     private final TextView growthLine;
     private final TextView earned;
-    private final View growthFill;
-    private final View growthRest;
+    private GrowthBar growthBar;
     private final TextView quizNote;
     private final TextView quizButton;
     private String boundKeywords;
@@ -98,8 +98,6 @@ final class ArrivalScreen extends LinearLayout {
         addView(growthLine, matchWrap(6));
         addView(growthPanel(context), new LayoutParams(LayoutParams.MATCH_PARENT, style.size(258)));
         earned = (TextView) findViewWithTag("earned");
-        growthFill = findViewWithTag("fill");
-        growthRest = findViewWithTag("rest");
 
         addView(new View(context), new LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
 
@@ -144,11 +142,8 @@ final class ArrivalScreen extends LinearLayout {
         growthLine.setText(s.growthLine);
         earned.setText("+" + s.earnedThisRun + "XP");
         earned.setContentDescription("이번 주행 " + s.earnedThisRun + " XP 획득");
-        float share = Math.max(0f, Math.min(1f, s.stageShare));
-        ((LayoutParams) growthFill.getLayoutParams()).weight = share;
-        ((LayoutParams) growthRest.getLayoutParams()).weight = 1f - share;
-        growthFill.setVisibility(share > 0f ? VISIBLE : INVISIBLE);
-        growthFill.requestLayout();
+        if (s.stageNeeded <= 0) growthBar.setProgress(1f, "MAX");
+        else growthBar.setProgress(s.stageEarned / (float) s.stageNeeded, s.stageEarned + " / " + s.stageNeeded + " XP");
         quizNote.setText(!s.hasQuiz ? "끝까지 들은 이야기가 있어야 퀴즈를 풀 수 있어요"
                 : s.quizXp == 0 ? "오늘 퀴즈를 다시 풀어 볼 수 있어요"
                 : "+" + s.quizXp + " XP" + (s.quizCanLevelUp ? " · 레벨업 가능!" : " 획득 가능!"));
@@ -161,19 +156,9 @@ final class ArrivalScreen extends LinearLayout {
         FrameLayout panel = new FrameLayout(context);
         panel.setClipChildren(false);
 
-        LinearLayout track = new LinearLayout(context);
-        track.setBackground(style.shape(0xff98aa9f, 36));
-        track.setClipToOutline(true);
-        View fill = new View(context);
-        fill.setTag("fill");
-        GradientDrawable gradient = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
-                new int[] {0xff9be3a6, 0xffd7f3e4});
-        gradient.setCornerRadius(style.size(36));
-        fill.setBackground(gradient);
-        View rest = new View(context);
-        rest.setTag("rest");
-        track.addView(fill, new LayoutParams(0, LayoutParams.MATCH_PARENT, 0f));
-        track.addView(rest, new LayoutParams(0, LayoutParams.MATCH_PARENT, 1f));
+        // Stage progress gauge drawn from the XP numbers (not a picture).
+        growthBar = new GrowthBar(context, style.size(20));
+        View track = growthBar;
         FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
                 style.size(71), Gravity.BOTTOM);
         trackParams.leftMargin = style.size(120);

@@ -1,11 +1,7 @@
 package com.routeonomy.app.ui;
 
 import android.content.Context;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.SpannableStringBuilder;
@@ -51,7 +47,6 @@ final class QuizScreen extends LinearLayout {
     private static final int WRONG_BADGE = 0xffe58b8b;
     private static final int WRONG = 0xffd23f31;
     private static final int HINT_FILL = 0xffeef8cf;
-    private static final int PEN = 0xffe0484a;
 
     private final UiStyle style;
     private final IntConsumer onSubmit;
@@ -145,7 +140,10 @@ final class QuizScreen extends LinearLayout {
         FrameLayout.LayoutParams markParams = new FrameLayout.LayoutParams(style.size(190), style.size(200),
                 Gravity.START | Gravity.CENTER_VERTICAL);
         markParams.leftMargin = -style.size(44);
-        cardFrame.addView(mark, markParams);
+        // Top layer: above the card (elevation 3) and the choice cards below it, never clipped.
+        mark.view.setElevation(style.size(24));
+        cardFrame.addView(mark.view, markParams);
+        cardFrame.setTranslationZ(style.size(24));
         addView(cardFrame, matchWrap(12));
 
         choices = new LinearLayout(context);
@@ -395,63 +393,29 @@ final class QuizScreen extends LinearLayout {
         return params;
     }
 
-    /** Hand-drawn red pen mark: a loose circle for a right answer, a scribbled star for a wrong one. */
-    private static final class GradeMark extends View {
+    /** Red pen grading mark (exported from Figma): a circle for a right answer, a star for a wrong one. */
+    private static final class GradeMark {
         static final int NONE = 0, CORRECT = 1, WRONG = 2;
-        private final Paint pen = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Path path = new Path();
-        private final RectF oval = new RectF();
-        private final RectF tail = new RectF();
+        final android.widget.ImageView view;
         private int kind = NONE;
 
         GradeMark(Context context) {
-            super(context);
-            pen.setStyle(Paint.Style.STROKE);
-            pen.setStrokeCap(Paint.Cap.ROUND);
-            pen.setStrokeJoin(Paint.Join.ROUND);
-            pen.setColor(PEN);
-            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-            setVisibility(INVISIBLE); // keeps the card frame height, so the choices do not jump on answer
+            view = new android.widget.ImageView(context);
+            view.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            view.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            view.setVisibility(INVISIBLE); // keeps the card frame height, so the choices do not jump on answer
         }
 
         void show(int kind) {
             if (this.kind == kind) return;
             this.kind = kind;
-            setVisibility(kind == NONE ? INVISIBLE : VISIBLE);
-            if (kind != NONE) {
-                setScaleX(0.6f);
-                setScaleY(0.6f);
-                setAlpha(0f);
-                animate().scaleX(1f).scaleY(1f).alpha(0.9f).setDuration(220).start();
-            }
-            invalidate();
-        }
-
-        @Override protected void onDraw(Canvas canvas) {
-            float w = getWidth(), h = getHeight();
-            pen.setStrokeWidth(Math.max(4f, w / 26f));
-            path.reset();
-            if (kind == CORRECT) {
-                // A bit more than a full turn, slightly tilted, so the ends overlap like a pen stroke.
-                canvas.save();
-                canvas.rotate(-18f, w / 2f, h / 2f);
-                oval.set(w * 0.12f, h * 0.2f, w * 0.88f, h * 0.8f);
-                tail.set(oval.left + w * 0.02f, oval.top - h * 0.03f, oval.right + w * 0.02f, oval.bottom - h * 0.03f);
-                path.addArc(oval, 200f, 345f);
-                path.arcTo(tail, 185f, 40f, false);
-                canvas.drawPath(path, pen);
-                canvas.restore();
-            } else if (kind == WRONG) {
-                // Five-point star drawn in one stroke.
-                double cx = w / 2.0, cy = h / 2.0, r = Math.min(w, h) * 0.42;
-                for (int i = 0; i <= 5; i++) {
-                    double angle = Math.toRadians(-90 + i * 144);
-                    float x = (float) (cx + r * Math.cos(angle)), y = (float) (cy + r * Math.sin(angle));
-                    if (i == 0) path.moveTo(x, y);
-                    else path.lineTo(x, y);
-                }
-                canvas.drawPath(path, pen);
-            }
+            view.setVisibility(kind == NONE ? INVISIBLE : VISIBLE);
+            if (kind == NONE) return;
+            view.setImageResource(kind == CORRECT ? R.drawable.grade_correct : R.drawable.grade_wrong);
+            view.setScaleX(0.6f);
+            view.setScaleY(0.6f);
+            view.setAlpha(0f);
+            view.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(220).start();
         }
     }
 }

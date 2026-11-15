@@ -38,7 +38,7 @@ final class ChoicePopup extends FrameLayout {
     ChoicePopup(Context context) {
         super(context);
         style = new UiStyle(context, 1f);
-        setBackgroundColor(0x33151815);
+        setBackgroundColor(0x26151815);
         setClickable(true); // swallow taps meant for the screen underneath
         setVisibility(GONE);
 
@@ -47,7 +47,7 @@ final class ChoicePopup extends FrameLayout {
         card.setGravity(Gravity.CENTER_HORIZONTAL);
         // Sizes are Figma dp (FigmaFrame scales the column).
         card.setPadding(style.size(44), style.size(32), style.size(44), style.size(36));
-        card.setBackground(style.shape(0xf7f7f7f2, 20));
+        card.setBackground(style.shape(0xc8f7f7f2, 20)); // semi-transparent, as in Figma
         card.setElevation(style.size(10));
 
         title = style.text("", 34, UiStyle.INK, false);
@@ -58,7 +58,7 @@ final class ChoicePopup extends FrameLayout {
         card.addView(rows, matchWrap(26));
         // Short notice inside the card (e.g. a feature still to come); fades out by itself.
         notice = style.text("", 20, UiStyle.GREEN, false);
-        notice.setGravity(Gravity.CENTER);
+        notice.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         notice.setLineSpacing(style.size(4), 1f);
         notice.setPadding(style.size(24), style.size(16), style.size(24), style.size(16));
         notice.setBackground(style.shape(UiStyle.MINT, 16));

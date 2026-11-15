@@ -491,7 +491,7 @@ public final class MainActivity extends Activity {
         nowPlaying.bind(current, hook != null ? hook : firstSentence(current), (int) (briefing.studyMillis() / 60_000), driveLeft, tripProgress);
         Integer toNext = progress.pointsToNextStage();
         nowPlaying.setLevel(stageText(), (toNext == null ? "마지막 단계" : "다음 단계까지 " + toNext + "XP")
-                + " · 보유 " + progress.balance() + "XP");
+                + "\n보유 " + progress.balance() + "XP");
         dashboard.setStageName(progress.stage().getLabel());
         String entered = briefing.enteredRegionId();
         RegionPrediction prediction = briefing.prediction();
@@ -596,8 +596,8 @@ public final class MainActivity extends Activity {
         com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
         summary.growthLine = (grown == null ? "" : grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요! ")
                 + (next == null ? "마지막 단계에 도착했어요!" : "다음 단계 '" + next.getLabel() + "'까지 " + toNext + "XP 남았어요!");
-        summary.stageShare = next == null ? 1f
-                : (progress.earnedTotal() - stage.getMinPoints()) / (float) (next.getMinPoints() - stage.getMinPoints());
+        summary.stageEarned = progress.earnedTotal() - stage.getMinPoints();
+        summary.stageNeeded = next == null ? 0 : next.getMinPoints() - stage.getMinPoints();
         QuizSession offer = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds());
         int unrewarded = 0;
         for (QuizQuestion q : offer.getQuestions()) if (!progress.isQuizAnswerRewarded(q.getSegmentId())) unrewarded++;
@@ -632,7 +632,8 @@ public final class MainActivity extends Activity {
                     @Override public boolean onPick(int index) {
                         if (index != voice) return true;
                         choicePopup.showNotice("🎙️ 음성으로 말하기는 준비 중이에요.\n"
-                                + "앞으로 Pleos SDK와 연결해, 음성으로 오늘의 콘텐츠와 난이도에 대한 의견을 보내는 기능을 개발할 예정입니다.");
+                                + "앞으로 Pleos SDK와 연결해, 음성으로 오늘의 콘텐츠와 난이도에 대한 의견을 보내는 기능을\n"
+                                + "개발할 예정입니다.");
                         return false;
                     }
                     @Override public void onPrimary(int selected) {

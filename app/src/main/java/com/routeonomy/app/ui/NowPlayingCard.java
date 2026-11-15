@@ -129,9 +129,10 @@ final class NowPlayingCard extends LinearLayout {
         levelLabel = style.text("", 21, UiStyle.INK, false);
         levelLabel.setGravity(Gravity.END);
         levelText.addView(levelLabel);
-        levelDetail = style.text("", 14, UiStyle.MUTED, false);
-        levelDetail.setGravity(Gravity.END);
-        levelText.addView(levelDetail);
+        levelDetail = style.text("", 16, UiStyle.MUTED, false);
+        levelDetail.setGravity(Gravity.END); // each line right-aligned
+        levelDetail.setLineSpacing(style.size(3), 1f);
+        levelText.addView(levelDetail, matchWrap(4));
         level.addView(levelText, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         settingsButton = style.iconButton(style.picture(R.drawable.pre_drive_settings), 28, "시뮬레이션 설정", onSettings);
         settingsButton.setBackground(style.shape(UiStyle.MINT, 25));
@@ -205,7 +206,7 @@ final class NowPlayingCard extends LinearLayout {
         progressFill.requestLayout();
     }
 
-    /** e.g. "🌱 새싹 Lv.2" and "다음 단계까지 45XP · 보유 120XP". */
+    /** e.g. "🌱 새싹 Lv.2" and "다음 단계까지 45XP\n보유 120XP" (two right-aligned lines). */
     void setLevel(String label, String detail) {
         if (!label.contentEquals(levelLabel.getText())) levelLabel.setText(label);
         if (!detail.contentEquals(levelDetail.getText())) levelDetail.setText(detail);
