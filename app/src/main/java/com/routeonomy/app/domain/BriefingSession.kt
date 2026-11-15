@@ -1,5 +1,7 @@
 package com.routeonomy.app.domain
 
+import kotlin.random.Random
+
 /** Speech output contract. Each [speak] carries a fresh utterance id; completion is reported back with that id. */
 interface SpeechOutput {
     fun speak(utteranceId: Int, text: String)
@@ -22,6 +24,7 @@ class BriefingSession @JvmOverloads constructor(
     private val speech: SpeechOutput,
     private val clock: () -> Long,
     private val planner: BriefingPlanner = BriefingPlanner(),
+    private val random: Random = Random.Default,
 ) {
     enum class State { IDLE, PLAYING, PAUSED, WAITING_FOR_REGION, FINISHED, NOTHING_LEFT, ERROR }
 
@@ -36,6 +39,8 @@ class BriefingSession @JvmOverloads constructor(
     private var regionSectionId: String? = null
     private var pendingAnnouncement: String? = null
     private var preferredFirstId: String? = null
+    /** MAIN order of this drive (picked topic, then 2 of its category : 1 random other); fixed once started. */
+    private var mainOrder: List<String> = PlaybackOrder.build(segments, null, random)
     private var currentSegmentId: String? = null
     private var chunks: List<String> = emptyList()
     private var chunkIndex = 0
@@ -174,7 +179,7 @@ class BriefingSession @JvmOverloads constructor(
         if (paused) { resume(); return }
         // The banner topic plays first, whatever the remaining time; only before the first start.
         val picked = dashboardTopic()
-        if (!started && picked != null) { preferredFirstId = picked.id; replan() }
+        if (!started && picked != null) pickTopic(picked.id)
         speakCurrent()
     }
 
@@ -234,8 +239,7 @@ class BriefingSession @JvmOverloads constructor(
     /** Topic picked in the Change topic popup; it plays first on start. */
     fun chooseDashboardTopic(id: String) {
         if (!canChangeDashboardTopic() || dashboardTopics().none { it.id == id }) return
-        preferredFirstId = id
-        replan()
+        pickTopic(id)
     }
 
     /** Banner swipe / Change topic: picks the next (+1) or previous (-1) page; it plays first on start. */
@@ -243,7 +247,13 @@ class BriefingSession @JvmOverloads constructor(
         if (!canChangeDashboardTopic()) return
         val topics = dashboardTopics()
         val index = topics.indexOf(dashboardTopic()).coerceAtLeast(0)
-        preferredFirstId = topics[Math.floorMod(index + delta, topics.size)].id
+        pickTopic(topics[Math.floorMod(index + delta, topics.size)].id)
+    }
+
+    /** Before the first start: the pick plays first and its category leads the rest of the drive. */
+    private fun pickTopic(id: String) {
+        preferredFirstId = id
+        if (mainOrder.firstOrNull() != id) mainOrder = PlaybackOrder.build(segments, id, random)
         replan()
     }
 
@@ -361,9 +371,9 @@ class BriefingSession @JvmOverloads constructor(
         val section = regionSectionId
         val predicted = prediction
         val next = when {
-            section != null -> planner.planRegion(etaMinutes, section, segments, exclude)
-            predicted != null -> planner.planBeforeRegion(predicted.estimatedMinutesToRegion, segments, exclude)
-            else -> planner.plan(etaMinutes, segments, exclude)
+            section != null -> planner.planRegion(etaMinutes, section, segments, exclude, order = mainOrder)
+            predicted != null -> planner.planBeforeRegion(predicted.estimatedMinutesToRegion, segments, exclude, order = mainOrder)
+            else -> planner.plan(etaMinutes, segments, exclude, order = mainOrder)
         }
         val queue = ArrayList<BriefingSegment>()
         head?.let(queue::add)

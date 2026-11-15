@@ -253,6 +253,31 @@ class BriefingSessionTest {
         assertEquals("m2 첫 문장.", speech.lastText())
     }
 
+    @Test fun pickedCategoryPlaysTwoToOneWithOtherTopics() {
+        val tech = listOf("m1", "m2", "m3").map { segment(it, BriefingSegment.Type.MAIN, "$it 문장.") }
+        val living = segment("l1", BriefingSegment.Type.MAIN, "l1 문장.").copy(category = BriefingSegment.Category.LIVING)
+        val drive = BriefingSession(tech + living + wrap, emptyList(), giheung, seoulStation, 60, speech, { now })
+            .also { it.setSpeechReady(true) }
+        drive.chooseDashboardTopic("m2")
+        val heard = mutableListOf<String>()
+        drive.startFromDashboard()
+        repeat(5) {
+            val id = drive.currentSegment()!!.id
+            heard += id
+            while (drive.isPlaying() && drive.currentSegment()?.id == id) drive.onUtteranceDone(speech.lastId())
+        }
+        assertEquals(listOf("m2", "m1", "l1", "m3", "wrap"), heard)
+    }
+
+    @Test fun unheardMainTopicsPlayAfterTheRegionSegments() {
+        session.updatePosition(pangyo.center, 20)
+        assertTrue(session.onRegionEntered("pangyo"))
+        session.startFromDashboard()
+        val heard = mutableListOf<String>()
+        while (session.currentSegment() != null) { heard += session.currentSegment()!!.id; finishSegment() }
+        assertEquals(listOf("m1", "r1", "m2", "wrap"), heard) // m2 used to be dropped, leaving silence
+    }
+
     @Test fun splitSentencesKeepsUnpunctuatedScript() {
         assertEquals(listOf("가.", "나?"), BriefingSession.splitSentences("가. 나?"))
         assertEquals(listOf("문장"), BriefingSession.splitSentences(" 문장 "))
