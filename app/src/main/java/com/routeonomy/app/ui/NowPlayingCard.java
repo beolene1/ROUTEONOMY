@@ -33,6 +33,10 @@ final class NowPlayingCard extends LinearLayout {
     private final View progressRest;
     private final TextView playbackStatus;
     private final TextView playButton;
+    private final LinearLayout transport;
+    private final TextView homeAction;
+    private final TextView nextAction;
+    private boolean reviewOnly;
     private final View settingsButton;
     private final TextView levelLabel;
     private final TextView levelDetail;
@@ -112,7 +116,7 @@ final class NowPlayingCard extends LinearLayout {
         playButton.setElevation(style.size(6));
         style.clickable(playButton, onPlayPause);
         // Previous · play/pause · next, usable in P and D.
-        LinearLayout transport = row();
+        transport = row();
         transport.addView(skipButton("⏮\uFE0E", "이전 주제", onPrevious), new LayoutParams(style.size(56), style.size(56)));
         LayoutParams playParams = new LayoutParams(style.size(88), style.size(88));
         playParams.setMarginStart(style.size(14));
@@ -154,11 +158,13 @@ final class NowPlayingCard extends LinearLayout {
         // Bottom row in the shape of the home screen: home · next topic · tools (P) · details (P).
         LinearLayout actions = row();
         TextView home = style.action("← 홈으로", false, onBack);
+        homeAction = home;
         home.setTextSize(27);
         home.setBackground(style.shape(UiStyle.NEUTRAL, 36));
         home.setContentDescription("홈 화면으로 가기");
         actions.addView(home, new LayoutParams(0, style.size(72), 1f));
         TextView next = style.action("다음 주제 듣기", true, onNext);
+        nextAction = next;
         next.setTextSize(27);
         next.setBackground(style.shape(UiStyle.GREEN, 36));
         LayoutParams nextParams = new LayoutParams(0, style.size(72), 1.77f);
@@ -215,6 +221,19 @@ final class NowPlayingCard extends LinearLayout {
     void setPlaying(boolean playing) {
         playButton.setText(playing ? "❚❚" : "▶");
         playButton.setContentDescription(playing ? "일시정지" : "재생");
+    }
+
+    /**
+     * After arrival the screen is for reading today's discoveries: playback controls are dimmed (the
+     * activity also ignores them) and the back action returns to the arrival summary.
+     */
+    void setReviewOnly(boolean on) {
+        if (on == reviewOnly) return;
+        reviewOnly = on;
+        transport.setAlpha(on ? 0.35f : 1f);
+        nextAction.setAlpha(on ? 0.45f : 1f);
+        homeAction.setText(on ? "← 도착 정리로" : "← 홈으로");
+        homeAction.setContentDescription(on ? "도착 정리 화면으로 가기" : "홈 화면으로 가기");
     }
 
     /** D: previous/play-pause/next and home (F6). P: also the tools gear. */

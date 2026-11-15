@@ -41,6 +41,7 @@ final class PreDriveDashboard extends LinearLayout {
     private int boundThumbnail = R.drawable.pre_drive_chip; // the topic's category, e.g. "생활 경제"
     private final TextView status;
     private final TextView startButton;
+    private boolean learningFinished;
     private final TextView changeButton;
     private final LinearLayout learning;
     private final TextView bubble;
@@ -172,10 +173,14 @@ final class PreDriveDashboard extends LinearLayout {
         bindLinkedIndicator(visuals.indicator);
         indexCaption.setText(visuals.indicatorCaption == null ? "" : visuals.indicatorCaption);
         indexCaption.setVisibility(visuals.indicator == null || visuals.indicatorCaption == null ? GONE : VISIBLE);
-        startButton.setEnabled(segment != null);
-        startButton.setAlpha(segment == null ? 0.5f : 1f);
-        changeButton.setEnabled(canChangeTopic);
-        changeButton.setAlpha(canChangeTopic ? 1f : 0.55f);
+        boolean canStart = segment != null && !learningFinished;
+        startButton.setText(learningFinished ? "✓ 오늘 학습 완료" : "Start today’s learning");
+        startButton.setEnabled(canStart);
+        startButton.setAlpha(canStart || learningFinished ? 1f : 0.5f);
+        boolean canChange = canChangeTopic && !learningFinished;
+        this.canChangeTopic = canChange;
+        changeButton.setEnabled(canChange);
+        changeButton.setAlpha(canChange ? 1f : 0.55f);
     }
 
     /** Card for the topic's linked indicator (same data as the home cards); rebuilt only when the kind changes. */
@@ -258,6 +263,9 @@ final class PreDriveDashboard extends LinearLayout {
     private String greetingText() {
         return "안녕하세요,\n" + stageName + "님 좋은 아침이에요!";
     }
+
+    /** Today's learning was wrapped up: Start no longer resumes the finished drive (call before bindTopic). */
+    void setLearningFinished(boolean finished) { learningFinished = finished; }
 
     void showStatus(CharSequence message) {
         status.setText(message);

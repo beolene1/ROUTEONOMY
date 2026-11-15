@@ -117,6 +117,8 @@ public final class MainActivity extends Activity {
     // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
     private boolean homeShown;
     private boolean arrivalCelebrated; // arrival opens its screen once per arrival
+    // "오늘 학습 마치기" done (review sent or skipped): home shows it as finished; no resume, no arrival screen.
+    private boolean learningFinished;
     private ScrollView quizScroll;
     // Points given for the last submitted answer, for the quiz feedback line.
     private QuizSession awardQuiz;
@@ -248,8 +250,8 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext, this::openReviewFlow,
-                this::goHome);
+        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext,
+                this::showDiscoveriesFromQuiz, this::openReviewFlow);
         quizScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         quizScroll = new ScrollView(this);
         quizScroll.setFillViewport(true);
@@ -362,6 +364,7 @@ public final class MainActivity extends Activity {
     }
 
     private void togglePlayback() {
+        if (playbackLocked()) return;
         briefing.togglePlayback();
         render();
     }
@@ -382,7 +385,9 @@ public final class MainActivity extends Activity {
 
     /** Home button / system back on the briefing screen: confirm first when audio is in progress. */
     private void requestHome() {
+        if (learningFinished) { goHome(); return; }
         if (session.canStartQuiz() && arrivalHidden) { // arrived: the briefing screen was opened over S3
+            briefing.pause();
             arrivalHidden = false;
             render();
             return;
@@ -440,7 +445,12 @@ public final class MainActivity extends Activity {
         render();
     }
 
+    /** After arrival in P, or once today's learning is finished, the briefing screen is read-only. */
+    private boolean playbackLocked() { return learningFinished || session.canStartQuiz(); }
+
     private void startDashboardBriefing() {
+        if (learningFinished) return;
+        if (session.canStartQuiz()) { setHomeShown(false); render(); return; } // arrived in P: back to the summary
         if (!ttsReady) {
             dashboard.showStatus(playbackText());
             return;
@@ -541,7 +551,9 @@ public final class MainActivity extends Activity {
         nowPlaying.setDriving(driving);
         BriefingSegment current = briefing.currentSegment();
         BriefingSegment shownTopic = briefing.dashboardTopic();
+        dashboard.setLearningFinished(learningFinished);
         dashboard.bindTopic(shownTopic, briefing.canChangeDashboardTopic());
+        nowPlaying.setReviewOnly(playbackLocked());
         String route = routeStatusText();
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
@@ -576,12 +588,14 @@ public final class MainActivity extends Activity {
                 ? !showDashboard || !briefing.canChangeDashboardTopic() : !quizAllowed))) choicePopup.hide();
         if (levelUpPopup.isShowing() && (driving || !quizAllowed)) levelUpPopup.hide();
         if (!quizAllowed) {
-            quiz = null; quizEmptyNotice = false; // left P or arrival was cleared: stop the quiz
             arrivalHidden = false;
-            // A cleared (simulated) arrival must not use up the screen of the real arrival.
-            if (session.arrival() != DriveSession.Arrival.ARRIVED) arrivalCelebrated = false;
+            if (session.arrival() != DriveSession.Arrival.ARRIVED) {
+                // A cleared (simulated) arrival: drop the quiz; it must not use up the screen of the real arrival.
+                quiz = null; quizEmptyNotice = false;
+                arrivalCelebrated = false;
+            } else if (quiz != null) quizHidden = true; // left P: keep this drive's quiz to resume in P
         }
-        else if (!arrivalCelebrated) {
+        else if (!arrivalCelebrated && !learningFinished) {
             // First time arrival and P hold together: the arrival summary replaces the current screen.
             arrivalCelebrated = true;
             arrivalHidden = false;
@@ -605,7 +619,7 @@ public final class MainActivity extends Activity {
         if (!session.canStartQuiz()) return;
         briefing.pause(); // same for the arrival popup and the quiz button
         setHomeShown(false); // e.g. from the arrival popup shown over the home screen
-        if (quiz != null && quizHidden && !quiz.isFinished()) { quizHidden = false; render(); return; } // resume
+        if (quiz != null && quizHidden) { quizHidden = false; render(); return; } // resume, or show the result again
         QuizSession next = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds(),
                 QuizSession.MAX_QUESTIONS, this::categoryOf);
         if (next.isEmpty()) {
@@ -633,7 +647,7 @@ public final class MainActivity extends Activity {
 
     /** S3: shown while arrived and in P, unless the quiz, home or the briefing screen was opened over it. */
     private void renderArrival(boolean quizAllowed) {
-        boolean show = quizAllowed && !arrivalHidden && !homeShown && !(quiz != null && !quizHidden);
+        boolean show = quizAllowed && !learningFinished && !arrivalHidden && !homeShown && !(quiz != null && !quizHidden);
         arrivalScroll.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
         briefingScroll.setVisibility(View.GONE);
@@ -701,14 +715,35 @@ public final class MainActivity extends Activity {
                         return false;
                     }
                     @Override public void onPrimary(int selected) {
-                        reviewStore.save(com.routeonomy.app.domain.LessonReview.values()[selected]);
-                        choicePopup.hide();
-                        showAppToast("✓  오늘의 리뷰가 저장되었어요. 고마워요!");
-                        updateBackCallback();
+                        if (!learningFinished) reviewStore.save(com.routeonomy.app.domain.LessonReview.values()[selected]);
+                        finishLearning("✓  리뷰가 저장되었어요. 오늘 학습 완료!");
                     }
-                    @Override public void onSecondary() { choicePopup.hide(); updateBackCallback(); }
+                    @Override public void onSecondary() { finishLearning("✓  오늘 학습을 마쳤어요. 수고했어요!"); }
                 });
         updateBackCallback();
+    }
+
+    /** Ends today's learning once: audio stays paused and home shows "오늘 학습 완료" (next drive: restart the app). */
+    private void finishLearning(String message) {
+        choicePopup.hide();
+        if (!learningFinished) {
+            learningFinished = true;
+            showAppToast(message);
+        }
+        briefing.pause();
+        if (quiz != null) quizHidden = true;
+        arrivalHidden = false;
+        toolsOpen = false;
+        detailsOpen = false;
+        setHomeShown(true);
+        render();
+    }
+
+    /** Quiz result "오늘의 발견": the read-only briefing screen with today's discoveries. */
+    private void showDiscoveriesFromQuiz() {
+        quizHidden = true;
+        showDetailsFromArrival();
+        briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, discoveries.getTop()));
     }
 
     /** Short message over the app column that fades out by itself. */
@@ -794,7 +829,7 @@ public final class MainActivity extends Activity {
             quiz.next();
             // S5 quiz result → 레벨업? → P2 (its 오늘의 정리 opens P3).
             if (quiz.isFinished() && pendingLevelUp() != null) quizScroll.postDelayed(() -> {
-                if (quiz != null && quiz.isFinished() && !quizHidden) showLevelUp(true);
+                if (quiz != null && quiz.isFinished() && !quizHidden) showLevelUp(false); // celebrate; wrap-up is a button
             }, 450);
         }
         renderQuiz();
@@ -806,8 +841,12 @@ public final class MainActivity extends Activity {
         return grown == null || grown == celebratedStage ? null : grown;
     }
 
-    /** 오늘의 정리 (S3 Review lesson, quiz result): a pending level-up first (P2), then the review (P3). */
+    /**
+     * "오늘 학습 마치기" (arrival screen, quiz result): a pending level-up first (P2), then the review (P3);
+     * sending or skipping the review finishes today's learning and returns home.
+     */
     private void openReviewFlow() {
+        if (learningFinished) { goHome(); return; }
         if (pendingLevelUp() != null) showLevelUp(true);
         else openReview();
     }
@@ -883,11 +922,13 @@ public final class MainActivity extends Activity {
     }
     /** "다음 주제": skips the topic being played; before anything started it does nothing (no silent skip). */
     private void nextTopic(){
+        if (playbackLocked()) return;
         briefing.nextTopic();
         render();
     }
     /** "이전 주제": replays the earlier topic from its start, or restarts the only one. */
     private void previousTopic(){
+        if (playbackLocked()) return;
         briefing.previousTopic();
         render();
     }
