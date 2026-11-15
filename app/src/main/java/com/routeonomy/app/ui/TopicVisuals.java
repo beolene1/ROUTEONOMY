@@ -67,6 +67,10 @@ final class TopicVisuals {
                 "오늘은 한국 방산 수출 계약에 어떤 일이 담기는지 알아볼거에요!", "군용 장비를 수출할 때 왜 정비와 현지 생산도 계약에 들어갈까요?"));
         BY_ID.put("main-nvidia", new TopicVisuals(null, null,
                 "오늘은 젠슨 황 사임 뒤 반도체 시장이 주목하는 지표에 대해 알아볼거에요!", "엔비디아 대표가 바뀌면 반도체 시장은 어떤 숫자에 주목할까요?"));
+        BY_ID.put("main-etf", new TopicVisuals(null, null,
+                "오늘은 ETF가 어떻게 코스피 상장주식 거래대금을 앞질렀는지 알아볼거에요!", "사람들은 왜 개별 주식 대신 ETF를 사고팔까요?"));
+        BY_ID.put("main-nodogang", new TopicVisuals(null, null,
+                "오늘은 노원·도봉·강북에서 집값과 거래량이 왜 엇갈렸는지 알아볼거에요!", "집값이 10퍼센트 넘게 올랐는데 왜 계약은 줄었을까요?", R.drawable.topic_housing));
         BY_ID.put("region-pangyo-housing", new TopicVisuals(null, null, null,
                 "판교에서 일한다면, 집에 드는 돈은 얼마일까요?", R.drawable.topic_housing));
         BY_ID.put("region-pangyo-realestate", new TopicVisuals(null, null, null,

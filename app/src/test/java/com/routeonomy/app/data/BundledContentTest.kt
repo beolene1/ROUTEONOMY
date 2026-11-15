@@ -85,12 +85,17 @@ class BundledContentTest {
 
     @Test fun livingEconomyAndHousingScriptsAreSourced() {
         val living = segments.filter { it.category == BriefingSegment.Category.LIVING }
-        assertEquals(listOf("main-rates", "main-fx", "main-ppi"), living.map { it.id })
+        assertTrue(living.map { it.id }.containsAll(listOf("main-rates", "main-fx", "main-ppi")))
         assertTrue(living.all { it.type == BriefingSegment.Type.MAIN && it.sources.isNotEmpty() })
         // Region segments play in file order: the housing story comes first after entering Pangyo.
         val pangyo = segments.filter { it.regionId == "pangyo" }
         assertEquals("region-pangyo-housing", pangyo.first().id)
         assertTrue(pangyo.first().sources.isNotEmpty())
+    }
+
+    @Test fun everyAddedScriptCitesASource() {
+        val unsourced = setOf("main-semiconductor", "region-pangyo-realestate", "region-pangyo-industry", "region-pangyo-newbiz", "wrapup")
+        assertTrue(segments.filter { it.id !in unsourced }.all { it.sources.isNotEmpty() })
     }
 
     @Test fun missingCategoryFallsBackByType() {
