@@ -41,6 +41,17 @@ final class TopicVisuals {
                 "오늘은 전력 저장에 대해 알아볼거에요!", "남는 전기를 저장해 두면 무엇이 달라질까요?"));
         BY_ID.put("main-efficiency", new TopicVisuals(null, null,
                 "오늘은 효율 경쟁에 대해 알아볼거에요!", "같은 전기로 더 많이 계산하는 것이 왜 중요할까요?"));
+        BY_ID.put("main-rates", new TopicVisuals(IndicatorKind.US_10Y,
+                "미국 10년물 국채금리는 세계에서 가장 많이 참고하는 시장금리예요!",
+                "오늘은 금리가 내 지갑에 닿는 길을 알아볼거에요!", "미국 금리가 오르면, 내 대출 이자도 오를까요?"));
+        BY_ID.put("main-fx", new TopicVisuals(IndicatorKind.USD_KRW,
+                "원·달러 카드는 유럽중앙은행 기준환율로 계산해 서울 종가와 조금 달라요!",
+                "오늘은 환율과 장바구니의 관계를 알아볼거에요!", "환율이 오르면 내 지갑엔 무슨 일이 생길까요?"));
+        BY_ID.put("main-ppi", new TopicVisuals(IndicatorKind.US_PPI,
+                "생산자물가는 기업이 물건을 팔 때 받는 가격의 변화를 보여 줘요!",
+                "오늘은 미국 물가 뉴스가 중요한 이유를 알아볼거에요!", "미국 물가 뉴스가 왜 우리에게 중요할까요?"));
+        BY_ID.put("region-pangyo-housing", new TopicVisuals(null, null, null,
+                "판교에서 일한다면, 집에 드는 돈은 얼마일까요?"));
         BY_ID.put("region-pangyo-realestate", new TopicVisuals(null, null, null,
                 "판교의 오피스 건물에는 누가, 어떻게 투자할까요?"));
         BY_ID.put("region-pangyo-industry", new TopicVisuals(null, null, null,

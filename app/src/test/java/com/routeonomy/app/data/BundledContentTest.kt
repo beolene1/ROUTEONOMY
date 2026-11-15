@@ -83,6 +83,16 @@ class BundledContentTest {
             .all { it.category == BriefingSegment.Category.REGION })
     }
 
+    @Test fun livingEconomyAndHousingScriptsAreSourced() {
+        val living = segments.filter { it.category == BriefingSegment.Category.LIVING }
+        assertEquals(listOf("main-rates", "main-fx", "main-ppi"), living.map { it.id })
+        assertTrue(living.all { it.type == BriefingSegment.Type.MAIN && it.sources.isNotEmpty() })
+        // Region segments play in file order: the housing story comes first after entering Pangyo.
+        val pangyo = segments.filter { it.regionId == "pangyo" }
+        assertEquals("region-pangyo-housing", pangyo.first().id)
+        assertTrue(pangyo.first().sources.isNotEmpty())
+    }
+
     @Test fun missingCategoryFallsBackByType() {
         val row = """{"id":"x","type":"MAIN","topic":"T","script":"S","durationSec":1,"industries":[],"keywords":[],
             "term":{"name":"n","explanation":"e"},"regionId":null,"sources":[]}"""
