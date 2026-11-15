@@ -37,6 +37,7 @@ final class PreDriveDashboard extends LinearLayout {
     private int heroArt;
     private String stageName = "씨앗";
     private final TextView description;
+    private final TextView badge; // the topic's category, e.g. "생활 경제"
     private final TextView status;
     private final TextView startButton;
     private final TextView changeButton;
@@ -105,7 +106,7 @@ final class PreDriveDashboard extends LinearLayout {
         learning.addView(thumbnail, new LayoutParams(size(narrow ? 140 : 184), size(102)));
 
         LinearLayout copy = column();
-        TextView badge = pill("Today’s learning", GREEN, MINT, 16);
+        badge = pill("Today’s learning", GREEN, MINT, 16);
         copy.addView(badge, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
         topic = text("", 27, INK, true);
         topic.setMaxLines(1);
@@ -145,6 +146,8 @@ final class PreDriveDashboard extends LinearLayout {
         this.canChangeTopic = canChangeTopic;
         TopicVisuals visuals = TopicVisuals.of(segment);
         topic.setText(segment == null ? "브리핑 없음" : segment.getTopic());
+        BriefingSegment.Category category = segment == null ? null : segment.getCategory();
+        badge.setText(category == null ? "Today’s learning" : category.getLabel());
         description.setText(visuals.question == null ? "" : "★  " + visuals.question);
         description.setVisibility(visuals.question == null ? GONE : VISIBLE);
         bubble.setText(TopicVisuals.bubble(segment));

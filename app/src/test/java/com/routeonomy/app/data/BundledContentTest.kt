@@ -77,6 +77,20 @@ class BundledContentTest {
         assertEquals("AI 시대, 반도체가 중요한 이유", first.topic)
     }
 
+    @Test fun everyTopicHasACategoryAndRegionSegmentsAreRegional() {
+        assertTrue(segments.filter { it.type != BriefingSegment.Type.WRAPUP }.all { it.category != null })
+        assertTrue(segments.filter { it.type == BriefingSegment.Type.REGION }
+            .all { it.category == BriefingSegment.Category.REGION })
+    }
+
+    @Test fun missingCategoryFallsBackByType() {
+        val row = """{"id":"x","type":"MAIN","topic":"T","script":"S","durationSec":1,"industries":[],"keywords":[],
+            "term":{"name":"n","explanation":"e"},"regionId":null,"sources":[]}"""
+        assertEquals(BriefingSegment.Category.TECH, SegmentJsonParser.segments("[$row]").single().category)
+        val living = row.replace("\"sources\":[]", "\"sources\":[],\"category\":\"LIVING\"")
+        assertEquals(BriefingSegment.Category.LIVING, SegmentJsonParser.segments("[$living]").single().category)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun duplicateRegionIdsAreRejected() {
         RouteJsonParser.regions("""[{"id":"a","name":"A","latitude":37,"longitude":127,"radiusMeters":1},{"id":"a","name":"B","latitude":37,"longitude":127,"radiusMeters":1}]""")
