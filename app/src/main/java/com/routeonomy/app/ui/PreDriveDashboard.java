@@ -21,6 +21,7 @@ final class PreDriveDashboard extends LinearLayout {
     private static final int NEUTRAL = UiStyle.NEUTRAL;
     private static final int GREEN = UiStyle.GREEN;
     private static final int MINT = UiStyle.MINT;
+    private static final int BUBBLE = 0xffcfe9b8;
 
     private final UiStyle style;
     private final boolean narrow;
@@ -32,15 +33,18 @@ final class PreDriveDashboard extends LinearLayout {
     private final TextView startButton;
     private final TextView changeButton;
     private final LinearLayout learning;
-    private final LinearLayout dots;
+    private final TextView bubble;
+    private final LinearLayout indexSlot;
+    private final TextView indexCaption;
+    private String boundIndex;
+    private Boolean boundRising;
     private final Runnable onNext;
     private final Runnable onPrevious;
     private boolean canChangeTopic;
-    private int dotsPosition = -1, dotsCount = -1;
 
     /** @param windowWidth width in dp of the column the dashboard is shown in (not the whole window). */
     PreDriveDashboard(Context context, int windowWidth, Runnable onStart, Runnable onNext, Runnable onPrevious,
-            Runnable onSettings, Runnable onFeatures) {
+            Runnable onChangeTopic, Runnable onSettings, Runnable onFeatures) {
         super(context);
         this.onNext = onNext;
         this.onPrevious = onPrevious;
@@ -52,9 +56,33 @@ final class PreDriveDashboard extends LinearLayout {
 
         addView(header(), rowParams(0));
         addView(greeting(), rowParams(32));
-        addView(sectionTitle("OVER NIGHT MARKET SUMMARY", "예시 데이터"), rowParams(26));
+        addView(sectionTitle("OVER NIGHT MARKET SUMMARY", "밤사이 글로벌 시장의 주요 흐름을 확인해 보세요."), rowParams(26));
         addMarketRows();
-        addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"), rowParams(28));
+
+        // Topic heading and linked index card on the left, the study mascot with its speech bubble on the right.
+        LinearLayout topicHead = row();
+        topicHead.setGravity(Gravity.BOTTOM);
+        LinearLayout topicLeft = column();
+        topicLeft.addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"));
+        indexSlot = row();
+        topicLeft.addView(indexSlot, rowParams(14));
+        topicHead.addView(topicLeft, new LayoutParams(0, LayoutParams.WRAP_CONTENT, narrow ? 1f : 1.15f));
+        FrameLayout buddy = new FrameLayout(context);
+        bubble = text("", narrow ? 14 : 16, GREEN, true);
+        bubble.setGravity(Gravity.CENTER);
+        bubble.setLineSpacing(size(2), 1f);
+        bubble.setPadding(size(18), size(12), size(18), size(12));
+        bubble.setBackground(shape(BUBBLE, 60));
+        bubble.setMaxLines(3);
+        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(narrow ? 170 : 210), LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.START);
+        bubbleParams.topMargin = size(4);
+        buddy.addView(bubble, bubbleParams);
+        place(buddy, picture(R.drawable.home_study_mascot), narrow ? 110 : 150, narrow ? 111 : 151, Gravity.BOTTOM | Gravity.END);
+        topicHead.addView(buddy, new LayoutParams(0, size(narrow ? 150 : 190), 1f));
+        addView(topicHead, rowParams(20));
+        indexCaption = text("", 15, MUTED, false);
+        addView(indexCaption, rowParams(10));
 
         learning = row();
         styleCard(learning);
@@ -71,20 +99,17 @@ final class PreDriveDashboard extends LinearLayout {
         topic = text("", 20, INK, true);
         copy.addView(topic, rowParams(4));
         description = text("", 15, MUTED, false);
-        description.setMaxLines(2);
+        description.setMaxLines(1);
+        description.setEllipsize(android.text.TextUtils.TruncateAt.END);
         copy.addView(description, rowParams(4));
         LayoutParams copyParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
         copyParams.setMarginStart(size(14));
         learning.addView(copy, copyParams);
         addView(learning, rowParams(10));
         enableSwipe(learning);
-        dots = row();
-        dots.setGravity(Gravity.CENTER);
-        dots.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        addView(dots, rowParams(10));
 
         LinearLayout actions = row();
-        changeButton = action("Change topic", MUTED, NEUTRAL, () -> slide(1));
+        changeButton = action("Change topic", MUTED, NEUTRAL, () -> { if (canChangeTopic) onChangeTopic.run(); });
         startButton = action("Start today’s learning", Color.WHITE, GREEN, onStart);
         actions.addView(changeButton, new LayoutParams(0, size(49), 1f));
         LayoutParams startParams = new LayoutParams(0, size(49), 2f);
@@ -92,7 +117,7 @@ final class PreDriveDashboard extends LinearLayout {
         actions.addView(startButton, startParams);
         addActionIcon(actions, picture(R.drawable.pre_drive_settings), "시뮬레이션 설정", onSettings);
         addActionIcon(actions, gridIcon(), "브리핑과 퀴즈 화면", onFeatures);
-        addView(actions, rowParams(16));
+        addView(actions, rowParams(22));
 
         status = text("", 16, MUTED, false);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
@@ -100,34 +125,36 @@ final class PreDriveDashboard extends LinearLayout {
         addView(status, rowParams(8));
     }
 
-    /** @param position index of the shown topic among [count] swipeable topics (dots); count 0 hides them. */
-    void bindTopic(BriefingSegment segment, boolean canChangeTopic, int position, int count) {
+    void bindTopic(BriefingSegment segment, boolean canChangeTopic) {
         this.canChangeTopic = canChangeTopic;
-        bindDots(position, count);
+        TopicVisuals visuals = TopicVisuals.of(segment);
         topic.setText(segment == null ? "브리핑 없음" : segment.getTopic());
-        description.setText(segment == null ? "" : "★  " + segment.getTerm().getName()
-                + " · " + segment.getTerm().getExplanation());
-        description.setVisibility(segment == null ? GONE : VISIBLE);
+        description.setText(visuals.question == null ? "" : "★  " + visuals.question);
+        description.setVisibility(visuals.question == null ? GONE : VISIBLE);
+        bubble.setText(TopicVisuals.bubble(segment));
+        bindIndex(visuals.index, visuals.indexRising);
+        indexCaption.setText(visuals.indexCaption == null ? "" : "오늘의 주제 연동 지표인 " + visuals.indexCaption);
+        indexCaption.setVisibility(visuals.indexCaption == null ? GONE : VISIBLE);
         startButton.setEnabled(segment != null);
         startButton.setAlpha(segment == null ? 0.5f : 1f);
         changeButton.setEnabled(canChangeTopic);
         changeButton.setAlpha(canChangeTopic ? 1f : 0.55f);
     }
 
-    private void bindDots(int position, int count) {
-        if (position == dotsPosition && count == dotsCount) return; // render() runs on every location fix
-        dotsPosition = position;
-        dotsCount = count;
-        dots.removeAllViews();
-        dots.setVisibility(count > 1 ? VISIBLE : GONE);
-        for (int i = 0; i < count && count > 1; i++) {
-            View dot = new View(getContext());
-            boolean on = i == position;
-            dot.setBackground(shape(on ? GREEN : NEUTRAL, 4));
-            LayoutParams params = new LayoutParams(size(on ? 22 : 8), size(8));
-            if (i > 0) params.setMarginStart(size(6));
-            dots.addView(dot, params);
-        }
+    /** Linked index card (example value); rebuilt only when the symbol changes (render() runs often). */
+    private void bindIndex(String symbol, boolean rising) {
+        if (java.util.Objects.equals(symbol, boundIndex) && Boolean.valueOf(rising).equals(boundRising)) return;
+        boundIndex = symbol;
+        boundRising = rising;
+        indexSlot.removeAllViews();
+        indexSlot.setVisibility(symbol == null ? GONE : VISIBLE);
+        if (symbol == null) return;
+        addMarketCard(indexSlot, symbol, rising);
+        // Same width as one market card: the rest of the row stays empty.
+        LayoutParams params = (LayoutParams) indexSlot.getChildAt(0).getLayoutParams();
+        params.width = 0;
+        params.weight = 1f;
+        indexSlot.addView(new View(getContext()), new LayoutParams(0, 1, narrow ? 0.001f : 0.72f));
     }
 
     /** Banner-style change: the card slides out, the topic changes, the new card slides in. */
@@ -185,7 +212,7 @@ final class PreDriveDashboard extends LinearLayout {
     }
 
     private String greetingText() {
-        return "안녕하세요,\n" + stageName + "님 좋은 아침입니다!";
+        return "안녕하세요,\n" + stageName + "님 좋은 아침이에요!";
     }
 
     void showStatus(CharSequence message) {
@@ -215,27 +242,25 @@ final class PreDriveDashboard extends LinearLayout {
         return hero;
     }
 
+    /** Bold uppercase heading with its Korean caption underneath. */
     private LinearLayout sectionTitle(String heading, String caption) {
-        LinearLayout headingRow = row();
-        headingRow.addView(text(heading, 20, INK, false));
-        TextView supporting = text(caption, 17, MUTED, false);
-        LayoutParams params = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        params.setMarginStart(size(14));
-        headingRow.addView(supporting, params);
-        return headingRow;
+        LinearLayout title = column();
+        title.addView(text(heading, 22, INK, true));
+        title.addView(text(caption, 18, MUTED, false), rowParams(6));
+        return title;
     }
 
     private void addMarketRows() {
         LinearLayout market = row();
         addMarketCard(market, "S&P 500", true);
-        addMarketCard(market, "USD/KRW", true);
+        addMarketCard(market, "NASDAQ", false);
         if (narrow) {
-            addView(market, rowParams(12));
+            addView(market, rowParams(16));
             market = row();
         }
-        addMarketCard(market, "NASDAQ", false);
-        addMarketCard(market, "S&P 500", false);
-        addView(market, rowParams(12));
+        addMarketCard(market, "USD/KRW", true);
+        if (narrow) market.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
+        addView(market, rowParams(narrow ? 12 : 16));
     }
 
     private void addMarketCard(LinearLayout market, String symbol, boolean rising) {

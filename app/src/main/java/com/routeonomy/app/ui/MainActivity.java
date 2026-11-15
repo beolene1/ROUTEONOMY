@@ -264,7 +264,8 @@ public final class MainActivity extends Activity {
         dashboardWidthDp = appWidthDp;
         dashboardScroll.removeAllViews();
         dashboard = new PreDriveDashboard(this, appWidthDp, this::startDashboardBriefing,
-                () -> shiftDashboardTopic(1), () -> shiftDashboardTopic(-1), () -> openTools(true), () -> openTools(false));
+                () -> shiftDashboardTopic(1), () -> shiftDashboardTopic(-1), () -> shiftDashboardTopic(1),
+                () -> openTools(true), () -> openTools(false));
         dashboardScroll.addView(dashboard);
         if (!ttsReady && ttsProblem != null) dashboard.showStatus(ttsProblem); // keep a TTS failure notice
     }
@@ -447,9 +448,8 @@ public final class MainActivity extends Activity {
         briefingScroll.setVisibility(showDashboard ? View.GONE : View.VISIBLE);
         nowPlaying.setDriving(driving);
         BriefingSegment current = briefing.currentSegment();
-        List<BriefingSegment> topics = briefing.dashboardTopics();
         BriefingSegment shownTopic = briefing.dashboardTopic();
-        dashboard.bindTopic(shownTopic, briefing.canChangeDashboardTopic(), Math.max(0, topics.indexOf(shownTopic)), topics.size());
+        dashboard.bindTopic(shownTopic, briefing.canChangeDashboardTopic());
         String route = routeStatusText();
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
