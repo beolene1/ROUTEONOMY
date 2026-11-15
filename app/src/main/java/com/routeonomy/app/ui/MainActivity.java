@@ -110,6 +110,8 @@ public final class MainActivity extends Activity {
     private PrefsReviewStore reviewStore;
     // Home indicator cards: the latest result per kind, re-applied when the dashboard is rebuilt.
     private IndicatorRepository indicatorRepository;
+    private SegmentChime segmentChime;
+    private final Handler gapHandler = new Handler(Looper.getMainLooper());
     private final java.util.Map<IndicatorKind, MarketIndicator> indicators = new java.util.EnumMap<>(IndicatorKind.class);
     private ConfirmPopup homeConfirm;
     // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
@@ -166,6 +168,13 @@ public final class MainActivity extends Activity {
                 session.etaMinutes(), speaker, () -> android.os.SystemClock.elapsedRealtime());
         progress = new PlayerProgress(new PrefsProgressStore(this));
         reviewStore = new PrefsReviewStore(this);
+        segmentChime = new SegmentChime(this);
+        // Between two segments: chime, a short pause, then the next one (unless playback stopped meanwhile).
+        briefing.setSegmentGapListener(token -> {
+            segmentChime.play();
+            gapHandler.postDelayed(() -> { briefing.finishGap(token); render(); }, SegmentChime.GAP_MILLIS);
+            return kotlin.Unit.INSTANCE;
+        });
         briefing.setCompletionListener(segment -> {
             progress.rewardSegment(segment.getId(), segment.getType());
             return kotlin.Unit.INSTANCE;
@@ -597,7 +606,8 @@ public final class MainActivity extends Activity {
         briefing.pause(); // same for the arrival popup and the quiz button
         setHomeShown(false); // e.g. from the arrival popup shown over the home screen
         if (quiz != null && quizHidden && !quiz.isFinished()) { quizHidden = false; render(); return; } // resume
-        QuizSession next = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds());
+        QuizSession next = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds(),
+                QuizSession.MAX_QUESTIONS, this::categoryOf);
         if (next.isEmpty()) {
             quiz = null;
             quizEmptyNotice = true;
@@ -634,13 +644,10 @@ public final class MainActivity extends Activity {
         summary.stageName = stage.getLabel();
         List<BriefingSegment> heard = TodayDiscoveries.from(segments, briefing.completedSegmentIds());
         for (BriefingSegment s : heard) {
-            IndicatorKind linked = TopicVisuals.of(s).indicator;
-            String index = linked == null ? null : linked.getTitle();
-            for (String key : new String[] {s.getKeywords().isEmpty() ? null : s.getKeywords().get(0), index}) {
-                if (key == null) continue;
-                String tag = key.replace(" ", "");
-                if (!summary.keywords.contains(tag) && summary.keywords.size() < 5) summary.keywords.add(tag);
-            }
+            // One keyword per heard topic; the screen shows only the chips that fit on one line.
+            if (s.getKeywords().isEmpty()) continue;
+            String tag = s.getKeywords().get(0).replace(" ", "");
+            if (!summary.keywords.contains(tag) && summary.keywords.size() < 5) summary.keywords.add(tag);
         }
         summary.studyMinutes = (int) (briefing.studyMillis() / 60_000);
         summary.heardCount = heard.size();
@@ -654,7 +661,8 @@ public final class MainActivity extends Activity {
         summary.nextArt = StageArt.character(next != null ? next : stage);
         summary.stageEarned = progress.earnedTotal() - stage.getMinPoints();
         summary.stageNeeded = next == null ? 0 : next.getMinPoints() - stage.getMinPoints();
-        QuizSession offer = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds());
+        QuizSession offer = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds(),
+                QuizSession.MAX_QUESTIONS, this::categoryOf);
         int unrewarded = 0;
         for (QuizQuestion q : offer.getQuestions()) if (!progress.isQuizAnswerRewarded(q.getSegmentId())) unrewarded++;
         summary.hasQuiz = !offer.isEmpty();
@@ -726,21 +734,32 @@ public final class MainActivity extends Activity {
         return row;
     }
 
-    /** P1 "원하는 토픽을 선택해보세요!": the unheard topics plus a random pick; Start begins with the choice. */
+    /** Category of a segment id, so the arrival quiz can take one question per category first. */
+    private Object categoryOf(String segmentId) {
+        for (BriefingSegment s : segments) if (s.getId().equals(segmentId)) return s.getCategory();
+        return null;
+    }
+
+    /**
+     * P1 "원하는 토픽을 선택해보세요!": one unheard topic per category (a random one, the current pick for its
+     * own category) plus a random pick over all of them; Start begins with the choice.
+     */
     private void openTopicChoice() {
         if (!briefing.canChangeDashboardTopic()) return;
-        final List<BriefingSegment> topics = briefing.dashboardTopics();
+        final List<BriefingSegment> all = briefing.dashboardTopics();
+        final List<BriefingSegment> topics =
+                com.routeonomy.app.domain.TopicChoice.onePerCategory(all, briefing.dashboardTopic());
         List<CharSequence> options = new ArrayList<>();
-        for (BriefingSegment topic : topics) options.add(topic.getTopic());
+        for (BriefingSegment topic : topics) options.add(topicOption(topic));
         options.add("여러 주제로 랜덤플레이");
         topicChoiceOpen = true;
         choicePopup.show("원하는 토픽을 선택해보세요!", options, true, topics.indexOf(briefing.dashboardTopic()), true,
                 "Start today’s learning", "Back", new ChoicePopup.Handler() {
                     @Override public boolean onPick(int index) { return true; }
                     @Override public void onPrimary(int selected) {
-                        int pick = selected < topics.size() ? selected : new java.util.Random().nextInt(topics.size());
-                        int shown = Math.max(0, topics.indexOf(briefing.dashboardTopic()));
-                        if (pick != shown) briefing.shiftDashboardTopic(pick - shown);
+                        BriefingSegment pick = selected < topics.size() ? topics.get(selected)
+                                : all.get(new java.util.Random().nextInt(all.size()));
+                        briefing.chooseDashboardTopic(pick.getId());
                         choicePopup.hide();
                         startDashboardBriefing();
                         render();
@@ -749,6 +768,16 @@ public final class MainActivity extends Activity {
                 });
         updateBackCallback();
     }
+    /** Popup row: a small category label over the topic title. */
+    private CharSequence topicOption(BriefingSegment topic) {
+        BriefingSegment.Category category = topic.getCategory();
+        if (category == null) return topic.getTopic();
+        android.text.SpannableStringBuilder row = new android.text.SpannableStringBuilder(category.getLabel());
+        row.setSpan(new android.text.style.RelativeSizeSpan(0.7f), 0, row.length(), 0);
+        row.append("\n").append(topic.getTopic());
+        return row;
+    }
+
     private void onQuizAnswer(int choice){
         if (quiz == null || quiz.isFinished() || quiz.isAnswered()) return;
         String segmentId = quiz.current().getSegmentId();
@@ -911,5 +940,5 @@ public final class MainActivity extends Activity {
         applyLayout();
         render();
     }
-    @Override protected void onDestroy(){if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
+    @Override protected void onDestroy(){gapHandler.removeCallbacksAndMessages(null);if(segmentChime!=null)segmentChime.release();if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
 }
