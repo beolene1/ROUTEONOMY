@@ -43,4 +43,17 @@ class MarketIndicatorTest {
         assertEquals("11/3", IndicatorText.date("2026-11-03"))
         assertEquals("2026년 10월", IndicatorText.date("2026-10"))
     }
+
+    @Test fun tenYearAndPpiText() {
+        val yield10 = MarketIndicator(IndicatorKind.US_10Y,
+            listOf(IndicatorPoint("2026-11-12", 5.10), IndicatorPoint("2026-11-13", 5.15)))
+        assertEquals("5.15%", IndicatorText.value(yield10))
+        assertEquals("+0.05%p · 11/13", IndicatorText.detail(yield10))
+        val ppi = MarketIndicator(IndicatorKind.US_PPI,
+            listOf(IndicatorPoint("2026-09", 3.1), IndicatorPoint("2026-10", 2.7)))
+        assertEquals("+2.7%", IndicatorText.value(ppi))
+        assertEquals("전년 동월 대비 · 2026년 10월", IndicatorText.detail(ppi))
+        assertTrue(ppi.rising) // prices are still higher than a year ago, even though the rate slowed
+        assertFalse(MarketIndicator(IndicatorKind.US_PPI, listOf(IndicatorPoint("2026-10", -0.4))).rising)
+    }
 }

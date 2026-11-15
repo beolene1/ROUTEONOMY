@@ -292,7 +292,7 @@ public final class MainActivity extends Activity {
     }
 
     private static final int WIDE_WINDOW_DP = 1200;
-    private static final List<IndicatorKind> CONNECTED_INDICATORS = java.util.Arrays.asList(IndicatorKind.USD_KRW);
+    private static final List<IndicatorKind> CONNECTED_INDICATORS = java.util.Arrays.asList(IndicatorKind.values());
     private static final float MAP_SHARE = 0.43f; // Figma: 722 of the 1682 dp frame
     /** Full window: route panel left, app right. Narrower (e.g. half split): route panel on top. */
     private void applyLayout() {
