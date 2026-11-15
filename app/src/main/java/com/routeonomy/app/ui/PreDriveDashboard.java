@@ -283,7 +283,12 @@ final class PreDriveDashboard extends LinearLayout {
             market = row();
         }
         addIndicatorCard(market, IndicatorKind.US_PPI);
-        if (narrow) market.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
+        if (narrow) {
+            // Same width as the cards above: the empty half has the same gap in front of it.
+            LayoutParams rest = new LayoutParams(0, 1, 1f);
+            rest.setMarginStart(size(20));
+            market.addView(new View(getContext()), rest);
+        }
         addView(market, rowParams(narrow ? 16 : 24));
     }
 

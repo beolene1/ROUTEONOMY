@@ -55,5 +55,6 @@ class MarketIndicatorTest {
         assertEquals("전년 동월 대비 · 2026년 10월", IndicatorText.detail(ppi))
         assertTrue(ppi.rising) // prices are still higher than a year ago, even though the rate slowed
         assertFalse(MarketIndicator(IndicatorKind.US_PPI, listOf(IndicatorPoint("2026-10", -0.4))).rising)
+        assertEquals("+0.0%", IndicatorText.value(MarketIndicator(IndicatorKind.US_PPI, listOf(IndicatorPoint("2026-10", -0.02)))))
     }
 }

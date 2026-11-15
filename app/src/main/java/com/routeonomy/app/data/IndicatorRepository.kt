@@ -32,17 +32,30 @@ class IndicatorRepository(context: Context) {
     fun refresh(kinds: List<IndicatorKind>, listener: (MarketIndicator) -> Unit) {
         for (kind in kinds) {
             executor.execute {
-                val result = try {
+                val saved = cached(kind)
+                val result = if (isRecent(kind) && saved.latest != null) {
+                    saved.copy(stale = false) // monthly data looked up recently: spare the BLS daily limit
+                } else try {
                     val points = IndicatorSources.load(kind, LocalDate.now(), IndicatorSources::httpGet)
-                    prefs.edit { putString(kind.name, IndicatorCodec.encode(points)) }
+                    prefs.edit {
+                        putString(kind.name, IndicatorCodec.encode(points))
+                        putLong(kind.name + KEY_FETCHED_AT, System.currentTimeMillis())
+                    }
                     MarketIndicator(kind, points)
                 } catch (e: Exception) { // network, HTTP, or parse failure: fall back to saved values
                     Log.w(TAG, "indicator $kind lookup failed: ${e.message}")
-                    cached(kind)
+                    saved
                 }
                 main.post { if (!closed) listener(result) }
             }
         }
+    }
+
+    /** The monthly PPI changes once a month, and the keyless BLS API allows only 25 requests a day. */
+    private fun isRecent(kind: IndicatorKind): Boolean {
+        if (kind != IndicatorKind.US_PPI) return false
+        val age = System.currentTimeMillis() - prefs.getLong(kind.name + KEY_FETCHED_AT, 0L)
+        return age in 0 until MONTHLY_REFRESH_MILLIS
     }
 
     fun close() {
@@ -52,5 +65,7 @@ class IndicatorRepository(context: Context) {
 
     private companion object {
         const val TAG = "IndicatorRepository"
+        const val KEY_FETCHED_AT = "_fetched_at"
+        const val MONTHLY_REFRESH_MILLIS = 6 * 60 * 60 * 1000L
     }
 }

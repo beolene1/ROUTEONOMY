@@ -26,8 +26,9 @@ object IndicatorSources {
     fun load(kind: IndicatorKind, today: LocalDate, get: (String) -> String): List<IndicatorPoint> = when (kind) {
         IndicatorKind.USD_KRW -> IndicatorParsers.frankfurter(get(frankfurterUrl(today)), "KRW").takeLast(CHART_POINTS)
         // This month alone is too short early in the month, so the previous month is merged in.
+        // One month failing is fine as long as the other has data (empty overall still fails below).
         IndicatorKind.US_10Y -> listOf(today.minusMonths(1), today)
-            .flatMap { IndicatorParsers.treasury10y(get(treasuryUrl(it))) }
+            .flatMap { month -> try { IndicatorParsers.treasury10y(get(treasuryUrl(month))) } catch (e: Exception) { emptyList() } }
             .distinctBy { it.date }.sortedBy { it.date }.takeLast(CHART_POINTS)
         IndicatorKind.US_PPI -> IndicatorParsers.yearOverYear(IndicatorParsers.bls(get(blsUrl()), PPI_SERIES))
             .takeLast(PPI_CHART_POINTS)
@@ -50,8 +51,8 @@ object IndicatorSources {
     fun httpGet(url: String): String {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
-            connection.connectTimeout = 8_000
-            connection.readTimeout = 10_000
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 8_000
             connection.instanceFollowRedirects = true
             connection.setRequestProperty("User-Agent", "Routeonomy/1.0 (Android)")
             val code = connection.responseCode

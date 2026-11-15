@@ -39,7 +39,7 @@ object IndicatorText {
         return when (indicator.kind) {
             IndicatorKind.USD_KRW -> String.format(Locale.US, "%,.1f원", v)
             IndicatorKind.US_10Y -> String.format(Locale.US, "%.2f%%", v)
-            IndicatorKind.US_PPI -> String.format(Locale.US, "%+.1f%%", v)
+            IndicatorKind.US_PPI -> String.format(Locale.US, "%+.1f%%", if (abs(v) < 0.05) 0.0 else v) // no "-0.0%"
         }
     }
 

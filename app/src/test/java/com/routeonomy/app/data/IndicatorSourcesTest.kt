@@ -70,6 +70,13 @@ class IndicatorSourcesTest {
         assertEquals(listOf("2026-10-30", "2026-10-31", "2026-11-02", "2026-11-03"), points.map { it.date })
     }
 
+    @Test fun tenYearSurvivesOneMonthFailing() {
+        val points = IndicatorSources.load(IndicatorKind.US_10Y, today) { url ->
+            if (url.endsWith("202610")) throw IOException("timeout") else treasury
+        }
+        assertEquals(listOf("2026-11-02", "2026-11-03"), points.map { it.date })
+    }
+
     private fun bls(vararg rows: String) =
         """{"status":"REQUEST_SUCCEEDED","Results":{"series":[{"seriesID":"WPUFD4","data":[${rows.joinToString(",")}]}]}}"""
     private fun row(year: Int, period: String, value: String) =
