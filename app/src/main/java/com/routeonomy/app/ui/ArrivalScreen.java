@@ -27,7 +27,7 @@ final class ArrivalScreen extends LinearLayout {
         int studyMinutes;
         int heardCount;
         int earnedThisRun;
-        /** Pictures: greeting (level-up art when the stage rose this drive), current and next stage. */
+        /** Pictures: greeting (cheering pose of the current stage), current and next stage. */
         int heroArt;
         int nowArt;
         int nextArt;

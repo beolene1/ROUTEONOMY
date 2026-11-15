@@ -122,9 +122,11 @@ final class UiStyle {
         LinearLayout morning = new LinearLayout(context);
         morning.setGravity(Gravity.CENTER_VERTICAL);
         morning.setBackground(shape(NEUTRAL, 17));
-        morning.setPadding(size(10), 0, size(10), 0);
+        morning.setPadding(size(12), 0, size(14), 0);
         morning.addView(picture(R.drawable.pre_drive_morning), new LinearLayout.LayoutParams(size(26), size(26)));
-        morning.addView(text(narrow ? "Morning" : "Morning mode", 20, MUTED, false));
+        LinearLayout.LayoutParams morningText = wrapParams();
+        morningText.setMarginStart(size(8)); // room between the sun and the words
+        morning.addView(text(narrow ? "Morning" : "Morning mode", 20, MUTED, false), morningText);
         header.addView(morning, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, size(34)));
         header.addView(new View(context), new LinearLayout.LayoutParams(0, 1, 1f));
 

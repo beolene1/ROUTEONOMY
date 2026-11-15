@@ -98,6 +98,9 @@ public final class MainActivity extends Activity {
     private boolean arrivalHidden; // grid / tools on the arrival screen show the briefing screen instead
     private ChoicePopup choicePopup;
     private TextView appToast;
+    // P2: shown once per stage reached, at the end of the drive (user flow: S5 or S3 → 레벨업? → P2 → P3).
+    private LevelUpPopup levelUpPopup;
+    private com.routeonomy.app.domain.GrowthStage celebratedStage;
     private final Runnable hideAppToast = () -> appToast.animate().alpha(0f).setDuration(300)
             .withEndAction(() -> appToast.setVisibility(View.GONE)).start();
     private boolean topicChoiceOpen; // which use of choicePopup is showing: topic choice (home) or review (arrival/quiz)
@@ -229,7 +232,7 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext, this::openReview,
+        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext, this::openReviewFlow,
                 this::goHome);
         quizScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         quizScroll = new ScrollView(this);
@@ -244,7 +247,7 @@ public final class MainActivity extends Activity {
         appArea.addView(dashboardScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(briefingScroll, new FrameLayout.LayoutParams(-1, -1));
         appArea.addView(quizScroll, new FrameLayout.LayoutParams(-1, -1));
-        arrivalScreen = new ArrivalScreen(this, this::openReview, this::startQuiz, this::openSimulationFromArrival,
+        arrivalScreen = new ArrivalScreen(this, this::openReviewFlow, this::startQuiz, this::openSimulationFromArrival,
                 this::showDetailsFromArrival);
         arrivalScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         arrivalScroll = new ScrollView(this);
@@ -255,6 +258,8 @@ public final class MainActivity extends Activity {
         appArea.addView(arrivalScroll, new FrameLayout.LayoutParams(-1, -1));
         choicePopup = new ChoicePopup(this);
         appArea.addView(choicePopup, new FrameLayout.LayoutParams(-1, -1));
+        levelUpPopup = new LevelUpPopup(this);
+        appArea.addView(levelUpPopup, new FrameLayout.LayoutParams(-1, -1));
         // In-app toast (the system toast is easy to miss on the car screen).
         appToast = style.text("", 22, android.graphics.Color.WHITE, true);
         appToast.setGravity(android.view.Gravity.CENTER);
@@ -364,7 +369,8 @@ public final class MainActivity extends Activity {
     private boolean backRegistered;
     private void updateBackCallback() {
         if (android.os.Build.VERSION.SDK_INT < 33) return;
-        boolean want = homeConfirm.isShowing() || choicePopup.isShowing() || dashboardScroll.getVisibility() != View.VISIBLE;
+        boolean want = homeConfirm.isShowing() || choicePopup.isShowing() || levelUpPopup.isShowing()
+                || dashboardScroll.getVisibility() != View.VISIBLE;
         if (want == backRegistered) return;
         if (backCallback == null) backCallback = (android.window.OnBackInvokedCallback) this::onSystemBack;
         android.window.OnBackInvokedDispatcher dispatcher = getOnBackInvokedDispatcher();
@@ -376,6 +382,7 @@ public final class MainActivity extends Activity {
     private void onSystemBack() {
         if (homeConfirm.isShowing()) homeConfirm.hide();
         else if (choicePopup.isShowing()) choicePopup.hide();
+        else if (levelUpPopup.isShowing()) closeLevelUp();
         else if (dashboardScroll.getVisibility() == View.VISIBLE) moveTaskToBack(true); // already home
         else if (quiz != null && !quizHidden) closeQuiz();
         else requestHome();
@@ -531,6 +538,7 @@ public final class MainActivity extends Activity {
         // The pick-one popup must not outlive its screen (it swallows taps), e.g. after shifting to D.
         if (choicePopup.isShowing() && (driving || (topicChoiceOpen
                 ? !showDashboard || !briefing.canChangeDashboardTopic() : !quizAllowed))) choicePopup.hide();
+        if (levelUpPopup.isShowing() && (driving || !quizAllowed)) levelUpPopup.hide();
         if (!quizAllowed) {
             quiz = null; quizEmptyNotice = false; // left P or arrival was cleared: stop the quiz
             arrivalHidden = false;
@@ -613,7 +621,7 @@ public final class MainActivity extends Activity {
         com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
         summary.growthLine = (grown == null ? "" : grown.getEmoji() + " " + grown.getLabel() + "(으)로 자랐어요! ")
                 + (next == null ? "마지막 단계에 도착했어요!" : "다음 단계 '" + next.getLabel() + "'까지 " + toNext + "XP 남았어요!");
-        summary.heroArt = grown != null ? StageArt.levelUp(grown) : StageArt.character(stage);
+        summary.heroArt = StageArt.arrival(stage);
         summary.nowArt = StageArt.character(stage);
         summary.nextArt = StageArt.character(next != null ? next : stage);
         summary.stageEarned = progress.earnedTotal() - stage.getMinPoints();
@@ -725,8 +733,44 @@ public final class MainActivity extends Activity {
     private void onQuizNext(){
         if (quiz == null) return;
         if (quiz.isFinished()) { quiz.restart(); awardQuiz = null; }
-        else if (quiz.isAnswered()) quiz.next();
+        else if (quiz.isAnswered()) {
+            quiz.next();
+            // S5 quiz result → 레벨업? → P2 (its 오늘의 정리 opens P3).
+            if (quiz.isFinished() && pendingLevelUp() != null) quizScroll.postDelayed(() -> {
+                if (quiz != null && quiz.isFinished() && !quizHidden) showLevelUp(true);
+            }, 450);
+        }
         renderQuiz();
+    }
+
+    /** Stage reached this drive and not celebrated yet, or null. */
+    private com.routeonomy.app.domain.GrowthStage pendingLevelUp() {
+        com.routeonomy.app.domain.GrowthStage grown = progress.stageReachedThisRun();
+        return grown == null || grown == celebratedStage ? null : grown;
+    }
+
+    /** 오늘의 정리 (S3 Review lesson, quiz result): a pending level-up first (P2), then the review (P3). */
+    private void openReviewFlow() {
+        if (pendingLevelUp() != null) showLevelUp(true);
+        else openReview();
+    }
+
+    private void showLevelUp(boolean thenReview) {
+        com.routeonomy.app.domain.GrowthStage grown = pendingLevelUp();
+        if (grown == null || levelUpPopup.isShowing()) return;
+        choicePopup.hide();
+        levelUpPopup.show(progress.stageAtStartOfRun(), grown, progress.earnedTotal(), progress.pointsToNextStage(),
+                StageArt.levelUp(grown), () -> {
+                    closeLevelUp();
+                    if (thenReview) openReview();
+                }, this::closeLevelUp);
+        updateBackCallback();
+    }
+
+    private void closeLevelUp() {
+        celebratedStage = progress.stageReachedThisRun();
+        levelUpPopup.hide();
+        updateBackCallback();
     }
     private void renderQuiz(){
         boolean showQuiz = quiz != null && !quizHidden && !homeShown;
