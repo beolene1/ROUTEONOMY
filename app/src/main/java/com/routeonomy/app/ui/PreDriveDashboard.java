@@ -27,7 +27,6 @@ final class PreDriveDashboard extends LinearLayout {
     private static final int NEUTRAL = UiStyle.NEUTRAL;
     private static final int GREEN = UiStyle.GREEN;
     private static final int MINT = UiStyle.MINT;
-    private static final int BUBBLE = 0xffcfe9b8;
 
     private final UiStyle style;
     private final boolean narrow;
@@ -86,10 +85,13 @@ final class PreDriveDashboard extends LinearLayout {
         bubble = text("", narrow ? 16 : 20, GREEN, true);
         bubble.setGravity(Gravity.CENTER);
         bubble.setLineSpacing(size(3), 1f);
-        bubble.setPadding(size(22), size(22), size(22), size(22));
-        bubble.setBackground(shape(BUBBLE, 90));
+        // Speech bubble art (tail at the bottom right, toward the mascot); text sits inside the oval.
+        int bubbleSize = narrow ? 190 : 245;
+        bubble.setPadding(size(bubbleSize * 0.13f), size(bubbleSize * 0.2f), size(bubbleSize * 0.09f), size(bubbleSize * 0.3f));
+        bubble.setBackgroundResource(R.drawable.home_bubble);
         bubble.setMaxLines(3);
-        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(narrow ? 190 : 245), LayoutParams.WRAP_CONTENT,
+        bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(bubbleSize), size(bubbleSize),
                 Gravity.TOP | Gravity.START);
         buddy.addView(bubble, bubbleParams);
         place(buddy, picture(R.drawable.home_study_mascot), narrow ? 130 : 190, narrow ? 131 : 191, Gravity.BOTTOM | Gravity.END);
