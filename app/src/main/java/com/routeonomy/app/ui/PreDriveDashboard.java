@@ -64,6 +64,7 @@ final class PreDriveDashboard extends LinearLayout {
         style = new UiStyle(context, windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f);
         setOrientation(VERTICAL);
         setBackgroundColor(BACKGROUND);
+        setClipChildren(false);
         // Sizes are Figma dp (FigmaFrame scales the column).
         setPadding(size(narrow ? 24 : 46), size(41), size(narrow ? 24 : 46), size(48));
 
@@ -87,14 +88,20 @@ final class PreDriveDashboard extends LinearLayout {
         bubble.setLineSpacing(size(3), 1f);
         // Speech bubble art (tail at the bottom right, toward the mascot); text sits inside the oval.
         int bubbleSize = narrow ? 190 : 245;
-        bubble.setPadding(size(bubbleSize * 0.13f), size(bubbleSize * 0.2f), size(bubbleSize * 0.09f), size(bubbleSize * 0.3f));
+        // Equal top/bottom insets put the text in the middle of the oval (the tail sits below it).
+        bubble.setPadding(size(bubbleSize * 0.13f), size(bubbleSize * 0.27f), size(bubbleSize * 0.09f), size(bubbleSize * 0.27f));
         bubble.setBackgroundResource(R.drawable.home_bubble);
         bubble.setMaxLines(3);
         bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
         FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(bubbleSize), size(bubbleSize),
                 Gravity.TOP | Gravity.START);
-        buddy.addView(bubble, bubbleParams);
+        // The mascot goes first so the bubble is drawn over the edge of its picture; the bubble is shifted
+        // left and up (into the free space above the section title) so the mascot does not cover it.
+        buddy.setClipChildren(false);
         place(buddy, picture(R.drawable.home_study_mascot), narrow ? 130 : 190, narrow ? 131 : 191, Gravity.BOTTOM | Gravity.END);
+        bubble.setTranslationX(-size(bubbleSize * 0.3f));
+        bubble.setTranslationY(-size(24));
+        buddy.addView(bubble, bubbleParams);
         topicHead.addView(buddy, new LayoutParams(0, size(narrow ? 190 : 245), 1f));
         addView(topicHead, rowParams(24));
         indexCaption = text("", 19, MUTED, false);
@@ -417,8 +424,10 @@ final class PreDriveDashboard extends LinearLayout {
         return style.pill(label, color, fill, textSize);
     }
 
+    /** Rounded white card with a soft drawn shadow (replaces the elevation shadow on the home screen). */
     private void styleCard(View card) {
-        style.card(card);
+        card.setBackground(new SoftCardDrawable(Color.WHITE, size(24), size(14), size(4), 0x1f1b3a2a));
+        card.setElevation(0f);
     }
 
     private ImageView picture(int resource) {
@@ -447,6 +456,7 @@ final class PreDriveDashboard extends LinearLayout {
     private LinearLayout column() {
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
+        column.setClipChildren(false); // card shadows and the speech bubble draw past their parents
         return column;
     }
 
