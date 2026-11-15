@@ -23,6 +23,7 @@ final class NowPlayingCard extends LinearLayout {
     private final ImageView picture;
     private final LinearLayout strip;
     private final View bottomSettings;
+    private final View detailsButton;
     private int[] boundStrip;
     private int boundPicture;
     private final TextView subtitle;
@@ -158,10 +159,10 @@ final class NowPlayingCard extends LinearLayout {
         LayoutParams gearParams = new LayoutParams(style.size(52), style.size(52));
         gearParams.setMarginStart(style.size(10));
         actions.addView(bottomSettings, gearParams);
-        View details = style.iconButton(gridIcon(), 26, "원고와 오늘의 발견 보기", onDetails);
+        detailsButton = style.iconButton(gridIcon(), 26, "원고와 오늘의 발견 보기", onDetails);
         LayoutParams detailsParams = new LayoutParams(style.size(52), style.size(52));
         detailsParams.setMarginStart(style.size(10));
-        actions.addView(details, detailsParams);
+        actions.addView(detailsButton, detailsParams);
         addView(actions, matchWrap(22));
 
         setPlaying(false);
@@ -209,6 +210,16 @@ final class NowPlayingCard extends LinearLayout {
     void setDriving(boolean driving) {
         settingsButton.setVisibility(driving ? INVISIBLE : VISIBLE);
         bottomSettings.setVisibility(driving ? GONE : VISIBLE);
+        detailsButton.setVisibility(driving ? GONE : VISIBLE); // the details only show in P
+    }
+
+    /** Short window (route map on top): no picture strip and a smaller picture, so the bottom row stays on screen. */
+    void setCompact(boolean compact) {
+        strip.setVisibility(compact ? GONE : VISIBLE);
+        LayoutParams params = (LayoutParams) picture.getLayoutParams();
+        params.width = style.size(compact ? 220 : 320);
+        params.height = style.size(compact ? 160 : 240);
+        picture.requestLayout();
     }
 
     private void bindStrip(int[] pictures) {

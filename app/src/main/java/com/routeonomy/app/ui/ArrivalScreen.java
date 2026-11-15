@@ -141,6 +141,7 @@ final class ArrivalScreen extends LinearLayout {
         growthFill.setVisibility(share > 0f ? VISIBLE : INVISIBLE);
         growthFill.requestLayout();
         quizNote.setText(!s.hasQuiz ? "끝까지 들은 이야기가 있어야 퀴즈를 풀 수 있어요"
+                : s.quizXp == 0 ? "오늘 퀴즈를 다시 풀어 볼 수 있어요"
                 : "+" + s.quizXp + " XP" + (s.quizCanLevelUp ? " · 레벨업 가능!" : " 획득 가능!"));
         quizButton.setEnabled(s.hasQuiz);
         quizButton.setAlpha(s.hasQuiz ? 1f : 0.45f);

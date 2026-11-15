@@ -27,6 +27,15 @@ class PlayerProgressTest {
         assertEquals(5, GrowthStage.FRUIT.level)
     }
 
+    @Test fun quizAnswerRewardedFlagFollowsFirstAnswer() {
+        assertFalse(progress.isQuizAnswerRewarded("m1"))
+        progress.rewardQuizAnswer("m1", correct = false)
+        assertTrue(progress.isQuizAnswerRewarded("m1"))
+        assertFalse(progress.isQuizAnswerRewarded("m2"))
+        progress.resetAll()
+        assertFalse(progress.isQuizAnswerRewarded("m1"))
+    }
+
     @Test fun segmentPointsByTypeOncePerRun() {
         assertEquals(5, progress.rewardSegment("m1", BriefingSegment.Type.MAIN))
         assertEquals(0, progress.rewardSegment("m1", BriefingSegment.Type.MAIN))

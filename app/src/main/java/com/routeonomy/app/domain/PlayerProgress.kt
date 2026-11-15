@@ -95,6 +95,9 @@ class PlayerProgress(private val store: ProgressStore) {
         return points
     }
 
+    /** True once the question of [segmentId] earned its answer reward this run (repeat answers earn nothing). */
+    fun isQuizAnswerRewarded(segmentId: String): Boolean = segmentId in answeredQuestions
+
     fun isHintPaid(segmentId: String): Boolean = segmentId in paidHints
     fun canShowHint(segmentId: String): Boolean = isHintPaid(segmentId) || balance >= PointRules.HINT_COST
 

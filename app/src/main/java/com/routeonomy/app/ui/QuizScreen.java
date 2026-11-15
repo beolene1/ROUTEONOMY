@@ -57,6 +57,7 @@ final class QuizScreen extends LinearLayout {
     private final IntConsumer onSubmit;
     private final Runnable onNext;
     private final Runnable onReview;
+    private final TextView title;
     private final TextView intro;
     private final TextView progressLabel;
     private final TextView xpLabel;
@@ -88,7 +89,7 @@ final class QuizScreen extends LinearLayout {
         setClipChildren(false);
 
         addView(style.appHeader(false), matchWrap(0));
-        TextView title = style.text("Today’s Economic Quiz", 44, UiStyle.INK, true);
+        title = style.text("Today’s Economic Quiz", 44, UiStyle.INK, true);
         title.setGravity(Gravity.CENTER);
         addView(title, matchWrap(40));
         intro = style.text("", 18, UiStyle.INK, false);
@@ -178,13 +179,14 @@ final class QuizScreen extends LinearLayout {
         addView(actions, matchWrap(24));
     }
 
-    /** Called when the quiz object, question or answer changed; drops any unsubmitted selection. */
+    /** Called when the quiz object, question, answer or XP changed; a new question drops the unsubmitted selection. */
     void bind(QuizSession quiz, String hintText, Rewards rewards) {
         boolean sameQuestion = quiz == this.quiz && this.quiz != null && quiz.position() == shownPosition;
         this.quiz = quiz;
         this.rewards = rewards;
         this.hint = hintText;
-        pending = null;
+        // A rebind for the same unanswered question (e.g. XP changed after a hint) keeps the picked choice.
+        if (!sameQuestion || quiz.isAnswered()) pending = null;
         if (!sameQuestion) hintShown = false;
         whyShown = quiz.isAnswered() && quiz.current() != null
                 && quiz.selectedChoice() != quiz.current().getAnswerIndex(); // a wrong answer explains itself
@@ -193,6 +195,14 @@ final class QuizScreen extends LinearLayout {
     }
 
     private int shownPosition = -1;
+
+    /** Short window (route map on top): smaller title and gaps so the buttons stay on screen. */
+    void setCompact(boolean compact) {
+        title.setTextSize(compact ? 32 : 44);
+        ((LayoutParams) title.getLayoutParams()).topMargin = style.size(compact ? 14 : 40);
+        ((LayoutParams) intro.getLayoutParams()).topMargin = style.size(compact ? 10 : 22);
+        title.requestLayout();
+    }
 
     private void refresh() {
         int total = quiz.total();
@@ -404,13 +414,13 @@ final class QuizScreen extends LinearLayout {
             pen.setStrokeJoin(Paint.Join.ROUND);
             pen.setColor(PEN);
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-            setVisibility(GONE);
+            setVisibility(INVISIBLE); // keeps the card frame height, so the choices do not jump on answer
         }
 
         void show(int kind) {
             if (this.kind == kind) return;
             this.kind = kind;
-            setVisibility(kind == NONE ? GONE : VISIBLE);
+            setVisibility(kind == NONE ? INVISIBLE : VISIBLE);
             if (kind != NONE) {
                 setScaleX(0.6f);
                 setScaleY(0.6f);

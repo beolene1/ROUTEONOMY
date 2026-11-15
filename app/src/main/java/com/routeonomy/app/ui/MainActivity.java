@@ -96,6 +96,7 @@ public final class MainActivity extends Activity {
     private ScrollView arrivalScroll;
     private boolean arrivalHidden; // grid / tools on the arrival screen show the briefing screen instead
     private ChoicePopup choicePopup;
+    private boolean topicChoiceOpen; // which use of choicePopup is showing: topic choice (home) or review (arrival/quiz)
     private PrefsReviewStore reviewStore;
     private ConfirmPopup homeConfirm;
     // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
@@ -268,10 +269,12 @@ public final class MainActivity extends Activity {
             screen.addView(routeMap, new LinearLayout.LayoutParams(0, -1, MAP_SHARE));
             screen.addView(appArea, new LinearLayout.LayoutParams(0, -1, 1 - MAP_SHARE));
         } else {
-            int mapHeight = Math.round(400 * getResources().getDisplayMetrics().density);
+            int mapHeight = Math.round(300 * getResources().getDisplayMetrics().density);
             screen.addView(routeMap, new LinearLayout.LayoutParams(-1, mapHeight));
             screen.addView(appArea, new LinearLayout.LayoutParams(-1, 0, 1));
         }
+        nowPlaying.setCompact(!wide);
+        quizScreen.setCompact(!wide);
         int appWidthDp = wide ? Math.round(widthDp * (1 - MAP_SHARE)) : widthDp;
         if (appWidthDp == dashboardWidthDp) return;
         // The dashboard sizes itself once at construction; rebuild it for the new column width.
@@ -318,6 +321,11 @@ public final class MainActivity extends Activity {
 
     /** Home button / system back on the briefing screen: confirm first when audio is in progress. */
     private void requestHome() {
+        if (session.canStartQuiz() && arrivalHidden) { // arrived: the briefing screen was opened over S3
+            arrivalHidden = false;
+            render();
+            return;
+        }
         if (briefing.isPlaying()) { homeConfirm.show(this::goHome); updateBackCallback(); }
         else goHome();
     }
@@ -499,6 +507,9 @@ public final class MainActivity extends Activity {
         // Demo-only: the movement row stays available in D so the region switch can be shown while driving.
         demoMovePanel.setVisibility(simulationOpen ? View.VISIBLE : View.GONE);
         boolean quizAllowed = session.canStartQuiz();
+        // The pick-one popup must not outlive its screen (it swallows taps), e.g. after shifting to D.
+        if (choicePopup.isShowing() && (driving || (topicChoiceOpen
+                ? !showDashboard || !briefing.canChangeDashboardTopic() : !quizAllowed))) choicePopup.hide();
         if (!quizAllowed) {
             quiz = null; quizEmptyNotice = false; // left P or arrival was cleared: stop the quiz
             arrivalHidden = false;
@@ -509,6 +520,7 @@ public final class MainActivity extends Activity {
             // First time arrival and P hold together: the arrival summary replaces the current screen.
             arrivalCelebrated = true;
             arrivalHidden = false;
+            briefing.pause(); // S3 has no playback controls
             if (homeShown) setHomeShown(false);
             arrivalScroll.scrollTo(0, 0);
         }
@@ -582,9 +594,11 @@ public final class MainActivity extends Activity {
                 + (next == null ? "마지막 단계에 도착했어요!" : "다음 단계 '" + next.getLabel() + "'까지 " + toNext + "XP 남았어요!");
         summary.stageShare = next == null ? 1f
                 : (progress.earnedTotal() - stage.getMinPoints()) / (float) (next.getMinPoints() - stage.getMinPoints());
-        int questions = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds()).total();
-        summary.hasQuiz = questions > 0;
-        summary.quizXp = questions * com.routeonomy.app.domain.PointRules.QUIZ_CORRECT;
+        QuizSession offer = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds());
+        int unrewarded = 0;
+        for (QuizQuestion q : offer.getQuestions()) if (!progress.isQuizAnswerRewarded(q.getSegmentId())) unrewarded++;
+        summary.hasQuiz = !offer.isEmpty();
+        summary.quizXp = unrewarded * com.routeonomy.app.domain.PointRules.QUIZ_CORRECT;
         summary.quizCanLevelUp = toNext != null && summary.quizXp >= toNext;
         arrivalScreen.bind(summary);
     }
@@ -608,6 +622,7 @@ public final class MainActivity extends Activity {
         }
         options.add(reviewRow("🎙️", "음성으로 말하기", "자유롭게 의견을 들려주세요"));
         final int voice = options.size() - 1;
+        topicChoiceOpen = false;
         choicePopup.show("오늘 이야기는 어땠나요?", options, false, -1, true, "Send today’s feedback", "Skip",
                 new ChoicePopup.Handler() {
                     @Override public boolean onPick(int index) {
@@ -645,6 +660,7 @@ public final class MainActivity extends Activity {
         List<CharSequence> options = new ArrayList<>();
         for (BriefingSegment topic : topics) options.add(topic.getTopic());
         options.add("여러 주제로 랜덤플레이");
+        topicChoiceOpen = true;
         choicePopup.show("원하는 토픽을 선택해보세요!", options, true, topics.indexOf(briefing.dashboardTopic()), true,
                 "Start today’s learning", "Back", new ChoicePopup.Handler() {
                     @Override public boolean onPick(int index) { return true; }
