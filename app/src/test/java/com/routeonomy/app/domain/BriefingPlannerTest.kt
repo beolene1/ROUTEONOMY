@@ -61,6 +61,20 @@ class BriefingPlannerTest {
         assertEquals(emptyList<String>(), planner.planRegion(10, "pangyo", all, setOf("r1", "r2", "wrap")).segments.map { it.id })
     }
 
+    @Test fun orderDecidesMainSequenceAheadOfContentOrder() {
+        val result = planner.planBeforeRegion(10, listOf(mainA, mainB, wrap), order = listOf("b", "a"))
+        assertEquals(listOf("b", "a"), result.segments.map { it.id })
+    }
+
+    @Test fun regionSectionFillsLeftoverTimeWithUnheardMainBeforeWrapUp() {
+        val all = listOf(mainA, mainB, region1, region2, wrap)
+        // 15 min: 900 - 60 slack - 60 wrap-up = 780; r1+r2 = 270, then b (order first) 120, a 180
+        assertEquals(listOf("r1", "r2", "b", "a", "wrap"),
+            planner.planRegion(15, "pangyo", all, order = listOf("b", "a")).segments.map { it.id })
+        // After both regional segments were heard the remaining time still plays main topics
+        assertEquals(listOf("a", "wrap"), planner.planRegion(6, "pangyo", all, setOf("r1", "r2")).segments.map { it.id })
+    }
+
     private fun segment(id: String, type: BriefingSegment.Type, seconds: Int, tags: List<String> = emptyList(), region: String? = null) =
         BriefingSegment(id, type, id, "script", seconds, tags, emptyList(), SegmentTerm("term", "meaning"), region, emptyList())
 }
