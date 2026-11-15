@@ -88,6 +88,15 @@ public final class MainActivity extends Activity {
     private int dashboardWidthDp = -1;
     private boolean simulationOpen;
     private LinearLayout demoMovePanel;
+    // Demo drive: moves the position along the route inside the app (no emulator GPX needed).
+    // Once used, Pleos FusedLocation fixes are ignored until the app restarts, so they cannot pull it back.
+    private com.routeonomy.app.simulation.DemoDrive demoDrive;
+    private boolean demoDriveUsed;
+    private long demoElapsedMillis;
+    private long demoResumedAt = -1; // -1 while paused
+    private Button demoPauseButton;
+    private final Handler demoHandler = new Handler(Looper.getMainLooper());
+    private final Runnable demoTick = this::onDemoTick;
     // Arrival quiz: null until started; dropped whenever P+ARRIVED no longer holds.
     private List<QuizQuestion> quizQuestions;
     private QuizSession quiz;
@@ -200,7 +209,7 @@ public final class MainActivity extends Activity {
         locationSource = new FusedLocationSource(this, fences, new FusedLocationSource.Listener() {
             @Override public void onLocation(GeoPoint point) { runOnUiThread(() -> onRealLocation(point)); }
             @Override public void onFenceTransition(String fenceId, boolean entered) { runOnUiThread(() -> onProximityAlert(fenceId, entered)); }
-            @Override public void onStatus(String message) { runOnUiThread(() -> { locationSourceStatus = message; render(); }); }
+            @Override public void onStatus(String message) { runOnUiThread(() -> { if (!demoDriveUsed) locationSourceStatus = message; render(); }); }
         });
         startLocation();
     }
@@ -238,11 +247,19 @@ public final class MainActivity extends Activity {
         Button nearNext=button("다음 단계 직전"); nearNext.setOnClickListener(v->{progress.moveNearNextStage();render();}); pointControls.addView(nearNext,weight());
         Button resetPoints=button("XP 초기화"); resetPoints.setOnClickListener(v->{progress.resetAll();render();}); pointControls.addView(resetPoints,weight());
         simulationPanel.addView(pointControls);
+        // Demo only: drive the route inside the app (replaces loading the GPX in the emulator Location panel).
+        LinearLayout demoDriveRow=new LinearLayout(this);
+        for (int speed : new int[]{3, 5, 10}) {
+            Button b=button("시연 주행 "+speed+"배속"); b.setOnClickListener(v->startDemoDrive(speed)); demoDriveRow.addView(b,weight());
+        }
+        simulationPanel.addView(demoDriveRow);
         // Demo-only movement row. It is the one simulation control kept on the driving screen.
         demoMovePanel=new LinearLayout(this); demoMovePanel.setOrientation(LinearLayout.VERTICAL);
         List<Place> stops = fakeRoute.stops();
         if (!stops.isEmpty()) addMoveButton(stops.get(0));
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
+        demoPauseButton=button("시연 주행 일시정지"); demoPauseButton.setOnClickListener(v->toggleDemoDrive());
+        demoPauseButton.setVisibility(View.GONE); demoMovePanel.addView(demoPauseButton,full());
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
@@ -469,7 +486,47 @@ public final class MainActivity extends Activity {
     private void addMoveButton(Place stop){Button b=button(stop.getName()+LevelUpPopup.particleRo(stop.getName())+" 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
+    private void startDemoDrive(int speed) {
+        demoDrive = new com.routeonomy.app.simulation.DemoDrive(routePoints, trip.getRemainingMinutes(), speed);
+        demoDriveUsed = true;
+        demoElapsedMillis = 0;
+        demoResumedAt = android.os.SystemClock.elapsedRealtime();
+        locationSourceStatus = "위치: 앱 시연 주행 " + speed + "배속";
+        demoPauseButton.setVisibility(View.VISIBLE);
+        demoPauseButton.setText("시연 주행 일시정지");
+        demoHandler.removeCallbacks(demoTick);
+        onDemoTick();
+    }
+    private void toggleDemoDrive() {
+        if (demoDrive == null) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (demoResumedAt >= 0) { // pause
+            demoElapsedMillis += now - demoResumedAt;
+            demoResumedAt = -1;
+            demoHandler.removeCallbacks(demoTick);
+            demoPauseButton.setText("시연 주행 계속");
+        } else {
+            demoResumedAt = now;
+            demoPauseButton.setText("시연 주행 일시정지");
+            onDemoTick();
+        }
+    }
+    private void onDemoTick() {
+        if (demoDrive == null || demoResumedAt < 0) return;
+        long elapsed = demoElapsedMillis + android.os.SystemClock.elapsedRealtime() - demoResumedAt;
+        applyLocation(demoDrive.positionAt(elapsed));
+        if (demoDrive.isFinished(elapsed)) {
+            demoDrive = null;
+            demoPauseButton.setVisibility(View.GONE);
+            locationSourceStatus = "위치: 앱 시연 주행 끝";
+            render();
+            return;
+        }
+        demoHandler.postDelayed(demoTick, 1000);
+    }
+
     private void onRealLocation(GeoPoint point) {
+        if (demoDriveUsed) return; // the demo drive owns the position until restart
         // The first real fix replaces the simulated start: fences count only after a real fix outside them.
         // Until then the simulation buttons keep working as a backup.
         if (lastRealFix == null) geofenceGate.reset();
@@ -478,7 +535,7 @@ public final class MainActivity extends Activity {
     }
     /** Pleos proximity alert; the gate drops registration-time and duplicate events. */
     private void onProximityAlert(String fenceId, boolean entered) {
-        if (lastRealFix == null) return; // registration-time alert before the first real fix
+        if (lastRealFix == null || demoDriveUsed) return; // registration-time alert, or the demo drive owns the position
         boolean accepted = entered ? geofenceGate.onEnter(fenceId) : geofenceGate.onExit(fenceId);
         if (!accepted) return;
         lastAlert = fenceName(fenceId) + (entered ? " 진입" : " 이탈");
@@ -981,5 +1038,5 @@ public final class MainActivity extends Activity {
         applyLayout();
         render();
     }
-    @Override protected void onDestroy(){gapHandler.removeCallbacksAndMessages(null);if(segmentChime!=null)segmentChime.release();if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
+    @Override protected void onDestroy(){demoHandler.removeCallbacksAndMessages(null);gapHandler.removeCallbacksAndMessages(null);if(segmentChime!=null)segmentChime.release();if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
 }
