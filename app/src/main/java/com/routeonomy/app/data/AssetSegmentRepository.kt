@@ -21,9 +21,10 @@ object SegmentJsonParser {
 
     private fun JSONObject.toSegment(): BriefingSegment {
         val termJson = getJSONObject("term")
+        val type = BriefingSegment.Type.valueOf(getString("type"))
         return BriefingSegment(
             id = getString("id"),
-            type = BriefingSegment.Type.valueOf(getString("type")),
+            type = type,
             topic = getString("topic"),
             script = getString("script"),
             durationSec = getInt("durationSec"),
@@ -32,6 +33,8 @@ object SegmentJsonParser {
             term = SegmentTerm(termJson.getString("name"), termJson.getString("explanation")),
             regionId = optString("regionId").takeIf { it.isNotEmpty() && it != "null" },
             sources = getJSONArray("sources").strings(),
+            category = optString("category").takeIf { it.isNotEmpty() && it != "null" }
+                ?.let { BriefingSegment.Category.valueOf(it) } ?: BriefingSegment.Category.defaultFor(type),
         )
     }
 

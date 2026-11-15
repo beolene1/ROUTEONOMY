@@ -12,6 +12,12 @@ import android.widget.TextView;
 
 import com.routeonomy.app.R;
 import com.routeonomy.app.domain.BriefingSegment;
+import com.routeonomy.app.domain.IndicatorKind;
+import com.routeonomy.app.domain.IndicatorText;
+import com.routeonomy.app.domain.MarketIndicator;
+
+import java.util.EnumMap;
+import java.util.Map;
 
 
 final class PreDriveDashboard extends LinearLayout {
@@ -21,7 +27,6 @@ final class PreDriveDashboard extends LinearLayout {
     private static final int NEUTRAL = UiStyle.NEUTRAL;
     private static final int GREEN = UiStyle.GREEN;
     private static final int MINT = UiStyle.MINT;
-    private static final int BUBBLE = 0xffcfe9b8;
 
     private final UiStyle style;
     private final boolean narrow;
@@ -31,6 +36,9 @@ final class PreDriveDashboard extends LinearLayout {
     private int heroArt;
     private String stageName = "씨앗";
     private final TextView description;
+    private final TextView badge;
+    private final ImageView thumbnailImage;
+    private int boundThumbnail = R.drawable.pre_drive_chip; // the topic's category, e.g. "생활 경제"
     private final TextView status;
     private final TextView startButton;
     private final TextView changeButton;
@@ -38,8 +46,10 @@ final class PreDriveDashboard extends LinearLayout {
     private final TextView bubble;
     private final LinearLayout indexSlot;
     private final TextView indexCaption;
-    private String boundIndex;
-    private Boolean boundRising;
+    private IndicatorKind linkedKind;
+    private IndicatorCard linkedCard;
+    private final Map<IndicatorKind, MarketIndicator> latestIndicators = new EnumMap<>(IndicatorKind.class);
+    private final Map<IndicatorKind, IndicatorCard> indicatorCards = new EnumMap<>(IndicatorKind.class);
     private final Runnable onNext;
     private final Runnable onPrevious;
     private boolean canChangeTopic;
@@ -54,12 +64,13 @@ final class PreDriveDashboard extends LinearLayout {
         style = new UiStyle(context, windowWidth > 0 ? Math.max(0.65f, Math.min(1f, windowWidth / 960f)) : 1f);
         setOrientation(VERTICAL);
         setBackgroundColor(BACKGROUND);
+        setClipChildren(false);
         // Sizes are Figma dp (FigmaFrame scales the column).
         setPadding(size(narrow ? 24 : 46), size(41), size(narrow ? 24 : 46), size(48));
 
         addView(header(), rowParams(0));
         addView(greeting(), rowParams(36));
-        addView(sectionTitle("OVER NIGHT MARKET SUMMARY", "밤사이 글로벌 시장의 주요 흐름을 확인해 보세요."), rowParams(40));
+        addView(sectionTitle("LATEST ECONOMIC INDICATORS", "최근 공개 경제지표예요. 지표마다 발표 주기가 달라 기준일을 함께 보여 드려요."), rowParams(40));
         addMarketRows();
 
         // Topic heading and linked index card on the left, the study mascot with its speech bubble on the right.
@@ -68,19 +79,30 @@ final class PreDriveDashboard extends LinearLayout {
         LinearLayout topicLeft = column();
         topicLeft.addView(sectionTitle("TODAY’S LEARNING TOPIC", "오늘의 경제 탐구"));
         indexSlot = row();
+        indexSlot.setVisibility(GONE); // shown only for a topic with a linked indicator
         topicLeft.addView(indexSlot, rowParams(20));
         topicHead.addView(topicLeft, new LayoutParams(0, LayoutParams.WRAP_CONTENT, narrow ? 1f : 1.15f));
         FrameLayout buddy = new FrameLayout(context);
         bubble = text("", narrow ? 16 : 20, GREEN, true);
         bubble.setGravity(Gravity.CENTER);
         bubble.setLineSpacing(size(3), 1f);
-        bubble.setPadding(size(22), size(22), size(22), size(22));
-        bubble.setBackground(shape(BUBBLE, 90));
+        // Speech bubble art (tail at the bottom right, toward the mascot); text sits inside the oval.
+        int bubbleSize = narrow ? 190 : 245;
+        // Equal top/bottom insets put the text in the middle of the oval (the tail sits below it).
+        // Narrower text box: longer lines wrap into up to three lines inside the oval instead of touching its edge.
+        bubble.setPadding(size(bubbleSize * 0.18f), size(bubbleSize * 0.27f), size(bubbleSize * 0.15f), size(bubbleSize * 0.27f));
+        bubble.setBackgroundResource(R.drawable.home_bubble);
         bubble.setMaxLines(3);
-        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(narrow ? 190 : 245), LayoutParams.WRAP_CONTENT,
+        bubble.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        FrameLayout.LayoutParams bubbleParams = new FrameLayout.LayoutParams(size(bubbleSize), size(bubbleSize),
                 Gravity.TOP | Gravity.START);
-        buddy.addView(bubble, bubbleParams);
+        // The mascot goes first so the bubble is drawn over the edge of its picture; the bubble is shifted
+        // left and up (into the free space above the section title) so the mascot does not cover it.
+        buddy.setClipChildren(false);
         place(buddy, picture(R.drawable.home_study_mascot), narrow ? 130 : 190, narrow ? 131 : 191, Gravity.BOTTOM | Gravity.END);
+        bubble.setTranslationX(-size(bubbleSize * 0.18f));
+        bubble.setTranslationY(-size(24));
+        buddy.addView(bubble, bubbleParams);
         topicHead.addView(buddy, new LayoutParams(0, size(narrow ? 190 : 245), 1f));
         addView(topicHead, rowParams(24));
         indexCaption = text("", 19, MUTED, false);
@@ -92,11 +114,12 @@ final class PreDriveDashboard extends LinearLayout {
         FrameLayout thumbnail = new FrameLayout(context);
         thumbnail.setBackground(shape(MINT, 10));
         thumbnail.setClipToOutline(true);
-        place(thumbnail, picture(R.drawable.pre_drive_chip), 140, 92, Gravity.CENTER);
+        thumbnailImage = picture(R.drawable.pre_drive_chip);
+        thumbnail.addView(thumbnailImage, new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         learning.addView(thumbnail, new LayoutParams(size(narrow ? 140 : 184), size(102)));
 
         LinearLayout copy = column();
-        TextView badge = pill("Today’s learning", GREEN, MINT, 16);
+        badge = pill("Today’s learning", GREEN, MINT, 16);
         copy.addView(badge, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
         topic = text("", 27, INK, true);
         topic.setMaxLines(1);
@@ -136,31 +159,38 @@ final class PreDriveDashboard extends LinearLayout {
         this.canChangeTopic = canChangeTopic;
         TopicVisuals visuals = TopicVisuals.of(segment);
         topic.setText(segment == null ? "브리핑 없음" : segment.getTopic());
+        BriefingSegment.Category category = segment == null ? null : segment.getCategory();
+        badge.setText(category == null ? "Today’s learning" : category.getLabel());
+        int art = TopicVisuals.thumbnail(segment);
+        if (art != boundThumbnail) {
+            boundThumbnail = art;
+            thumbnailImage.setImageResource(art);
+        }
         description.setText(visuals.question == null ? "" : "★  " + visuals.question);
         description.setVisibility(visuals.question == null ? GONE : VISIBLE);
         bubble.setText(TopicVisuals.bubble(segment));
-        bindIndex(visuals.index, visuals.indexRising);
-        indexCaption.setText(visuals.indexCaption == null ? "" : "오늘의 주제 연동 지표인 " + visuals.indexCaption);
-        indexCaption.setVisibility(visuals.indexCaption == null ? GONE : VISIBLE);
+        bindLinkedIndicator(visuals.indicator);
+        indexCaption.setText(visuals.indicatorCaption == null ? "" : visuals.indicatorCaption);
+        indexCaption.setVisibility(visuals.indicator == null || visuals.indicatorCaption == null ? GONE : VISIBLE);
         startButton.setEnabled(segment != null);
         startButton.setAlpha(segment == null ? 0.5f : 1f);
         changeButton.setEnabled(canChangeTopic);
         changeButton.setAlpha(canChangeTopic ? 1f : 0.55f);
     }
 
-    /** Linked index card (example value); rebuilt only when the symbol changes (render() runs often). */
-    private void bindIndex(String symbol, boolean rising) {
-        if (java.util.Objects.equals(symbol, boundIndex) && Boolean.valueOf(rising).equals(boundRising)) return;
-        boundIndex = symbol;
-        boundRising = rising;
+    /** Card for the topic's linked indicator (same data as the home cards); rebuilt only when the kind changes. */
+    private void bindLinkedIndicator(IndicatorKind kind) {
+        if (kind == linkedKind && (kind == null || linkedCard != null)) return;
+        linkedKind = kind;
+        linkedCard = null;
         indexSlot.removeAllViews();
-        indexSlot.setVisibility(symbol == null ? GONE : VISIBLE);
-        if (symbol == null) return;
-        addMarketCard(indexSlot, symbol, rising);
-        // Same width as one market card: the rest of the row stays empty.
-        LayoutParams params = (LayoutParams) indexSlot.getChildAt(0).getLayoutParams();
-        params.width = 0;
-        params.weight = 1f;
+        indexSlot.setVisibility(kind == null ? GONE : VISIBLE);
+        if (kind == null) return;
+        linkedCard = new IndicatorCard(kind);
+        MarketIndicator latest = latestIndicators.get(kind);
+        if (latest != null) linkedCard.bind(latest);
+        // Same width as one home card: the rest of the row stays empty.
+        indexSlot.addView(linkedCard.root, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         indexSlot.addView(new View(getContext()), new LayoutParams(0, 1, narrow ? 0.001f : 0.72f));
     }
 
@@ -267,48 +297,88 @@ final class PreDriveDashboard extends LinearLayout {
 
     private void addMarketRows() {
         LinearLayout market = row();
-        addMarketCard(market, "S&P 500", true);
-        addMarketCard(market, "NASDAQ", false);
+        addIndicatorCard(market, IndicatorKind.USD_KRW);
+        addIndicatorCard(market, IndicatorKind.US_10Y);
         if (narrow) {
             addView(market, rowParams(24));
             market = row();
         }
-        addMarketCard(market, "USD/KRW", true);
-        if (narrow) market.addView(new View(getContext()), new LayoutParams(0, 1, 1f));
+        addIndicatorCard(market, IndicatorKind.US_PPI);
+        if (narrow) {
+            // Same width as the cards above: the empty half has the same gap in front of it.
+            LayoutParams rest = new LayoutParams(0, 1, 1f);
+            rest.setMarginStart(size(20));
+            market.addView(new View(getContext()), rest);
+        }
         addView(market, rowParams(narrow ? 16 : 24));
     }
 
-    private void addMarketCard(LinearLayout market, String symbol, boolean rising) {
-        LinearLayout card = column();
-        card.setPadding(size(18), size(16), size(18), size(14));
-        styleCard(card);
-        card.addView(text(symbol, 20, INK, true));
+    /** One home indicator card; filled by {@link #bindIndicator} once a lookup (or the saved value) arrives. */
+    private final class IndicatorCard {
+        final LinearLayout root = column();
+        final ImageView circle = picture(R.drawable.pre_drive_gain_circle);
+        final ImageView arrow = picture(R.drawable.pre_drive_gain_arrow);
+        final FrameLayout movement = new FrameLayout(getContext());
+        final TextView value = text("…", 26, INK, false);
+        final TextView detail = text("불러오는 중", 16, MUTED, false);
+        final SparklineView chart = new SparklineView(getContext(), size(2.5f));
 
-        LinearLayout valueRow = row();
-        FrameLayout movement = new FrameLayout(getContext());
-        place(movement, picture(rising ? R.drawable.pre_drive_gain_circle : R.drawable.pre_drive_loss_circle),
-                31, 31, Gravity.CENTER);
-        ImageView arrow = picture(rising ? R.drawable.pre_drive_gain_arrow : R.drawable.pre_drive_loss_arrow);
-        if (!rising) arrow.setScaleY(-1);
-        place(movement, arrow, 15, 14, Gravity.CENTER);
-        valueRow.addView(movement, new LayoutParams(size(31), size(31)));
-        TextView value = text("0.05%", 26, INK, false);
-        value.setContentDescription(rising ? "0.05% 상승, 예시" : "0.05% 하락, 예시");
-        LayoutParams valueParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
-        valueParams.setMarginStart(size(6));
-        valueRow.addView(value, valueParams);
+        IndicatorCard(IndicatorKind kind) {
+            root.setPadding(size(18), size(16), size(18), size(14));
+            styleCard(root);
+            TextView title = text(kind.getTitle(), 20, INK, true);
+            title.setMaxLines(1);
+            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            root.addView(title);
 
-        FrameLayout chart = new FrameLayout(getContext());
-        place(chart, picture(rising ? R.drawable.pre_drive_gain_fill : R.drawable.pre_drive_loss_fill),
-                88, rising ? 43 : 40, Gravity.TOP | Gravity.START);
-        place(chart, picture(rising ? R.drawable.pre_drive_gain_line : R.drawable.pre_drive_loss_line),
-                90, rising ? 42 : 32, Gravity.TOP | Gravity.START);
-        valueRow.addView(chart, new LayoutParams(size(90), size(43)));
-        card.addView(valueRow, rowParams(8));
+            LinearLayout valueRow = row();
+            place(movement, circle, 31, 31, Gravity.CENTER);
+            place(movement, arrow, 15, 14, Gravity.CENTER);
+            movement.setVisibility(INVISIBLE);
+            valueRow.addView(movement, new LayoutParams(size(31), size(31)));
+            value.setMaxLines(1);
+            LayoutParams valueParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+            valueParams.setMarginStart(size(6));
+            valueRow.addView(value, valueParams);
+            valueRow.addView(chart, new LayoutParams(size(narrow ? 64 : 80), size(40)));
+            root.addView(valueRow, rowParams(8));
 
-        LayoutParams params = new LayoutParams(0, size(115), 1f);
-        if (market.getChildCount() > 0) params.setMarginStart(size(34));
-        market.addView(card, params);
+            detail.setMaxLines(1);
+            detail.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            root.addView(detail, rowParams(6));
+            root.addView(text(kind.getSource(), 14, MUTED, false), rowParams(2));
+            root.setContentDescription(kind.getTitle() + " 불러오는 중");
+        }
+
+        void bind(MarketIndicator indicator) {
+            boolean has = indicator.getLatest() != null;
+            boolean rising = indicator.getRising();
+            value.setText(IndicatorText.INSTANCE.value(indicator));
+            value.setTextColor(has ? INK : MUTED);
+            detail.setText(has ? IndicatorText.INSTANCE.detail(indicator) : "네트워크 연결 후 다시 열어 주세요");
+            movement.setVisibility(has ? VISIBLE : INVISIBLE);
+            circle.setImageResource(rising ? R.drawable.pre_drive_gain_circle : R.drawable.pre_drive_loss_circle);
+            arrow.setImageResource(rising ? R.drawable.pre_drive_gain_arrow : R.drawable.pre_drive_loss_arrow);
+            arrow.setScaleY(rising ? 1 : -1);
+            chart.setPoints(indicator.getPoints(), rising);
+            root.setContentDescription(IndicatorText.INSTANCE.spoken(indicator));
+        }
+    }
+
+    private void addIndicatorCard(LinearLayout market, IndicatorKind kind) {
+        IndicatorCard card = new IndicatorCard(kind);
+        indicatorCards.put(kind, card);
+        LayoutParams params = new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f);
+        if (market.getChildCount() > 0) params.setMarginStart(size(narrow ? 20 : 34));
+        market.addView(card.root, params);
+    }
+
+    /** Shows a lookup result (fresh, saved, or empty) on its home card. */
+    void bindIndicator(MarketIndicator indicator) {
+        latestIndicators.put(indicator.getKind(), indicator);
+        IndicatorCard card = indicatorCards.get(indicator.getKind());
+        if (card != null) card.bind(indicator);
+        if (linkedCard != null && linkedKind == indicator.getKind()) linkedCard.bind(indicator);
     }
 
     private TextView action(String title, int color, int fill, Runnable click) {
@@ -355,8 +425,10 @@ final class PreDriveDashboard extends LinearLayout {
         return style.pill(label, color, fill, textSize);
     }
 
+    /** Rounded white card with a soft drawn shadow (replaces the elevation shadow on the home screen). */
     private void styleCard(View card) {
-        style.card(card);
+        card.setBackground(new SoftCardDrawable(Color.WHITE, size(24), size(14), size(4), 0x1f1b3a2a));
+        card.setElevation(0f);
     }
 
     private ImageView picture(int resource) {
@@ -385,6 +457,7 @@ final class PreDriveDashboard extends LinearLayout {
     private LinearLayout column() {
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
+        column.setClipChildren(false); // card shadows and the speech bubble draw past their parents
         return column;
     }
 

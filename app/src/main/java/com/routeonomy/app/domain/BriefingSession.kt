@@ -52,6 +52,10 @@ class BriefingSession @JvmOverloads constructor(
     private var speechReady = false
     private var autoplayHeld = false
     private var completionListener: ((BriefingSegment) -> Unit)? = null
+    private var segmentGapListener: ((Int) -> Unit)? = null
+    // Short pause (with a chime, played by the screen) after a segment heard to the end, before the next one.
+    private var inGap = false
+    private var gapToken = 0
 
     init {
         updatePrediction()
@@ -86,6 +90,28 @@ class BriefingSession @JvmOverloads constructor(
 
     /** Called once per segment, the first time it is heard to the end (e.g. to give points). */
     fun setCompletionListener(listener: ((BriefingSegment) -> Unit)?) { completionListener = listener }
+
+    /**
+     * Called with a token when a segment was heard to the end and another follows. Nothing plays until
+     * [finishGap] with that token (the screen plays a chime and waits a few seconds). Without a listener
+     * the next segment starts right away.
+     */
+    fun setSegmentGapListener(listener: ((Int) -> Unit)?) { segmentGapListener = listener }
+
+    /** True between two segments, while the chime pause runs. */
+    fun isInGap(): Boolean = inGap
+
+    /** Ends the pause started with [token]; ignored when playback was paused or moved on meanwhile. */
+    fun finishGap(token: Int) {
+        if (!inGap || token != gapToken) return
+        endGap()
+        speakCurrent()
+    }
+
+    private fun endGap() {
+        inGap = false
+        active = false
+    }
 
     /** While held (e.g. the home screen is shown) a region entry or new estimate does not start audio by itself. */
     fun setAutoplayHeld(held: Boolean) { autoplayHeld = held }
@@ -134,6 +160,7 @@ class BriefingSession @JvmOverloads constructor(
     }
 
     fun pause() {
+        if (inGap) { endGap(); return } // play starts the next segment from its beginning
         if (!active) return
         paused = true
         active = false
@@ -143,6 +170,7 @@ class BriefingSession @JvmOverloads constructor(
     /** Start button on the dashboard: resumes a paused sentence, else starts with the banner topic. */
     fun startFromDashboard() {
         if (!speechReady) return
+        if (inGap) { finishGap(gapToken); return }
         if (paused) { resume(); return }
         // The banner topic plays first, whatever the remaining time; only before the first start.
         val picked = dashboardTopic()
@@ -152,6 +180,7 @@ class BriefingSession @JvmOverloads constructor(
 
     /** "다음 주제": skips the topic being played; before anything started it does nothing. */
     fun nextTopic() {
+        if (inGap) { finishGap(gapToken); return } // skip the pause, not the next topic
         if (currentSegmentId == null) return
         advance(completed = false)
     }
@@ -162,6 +191,7 @@ class BriefingSession @JvmOverloads constructor(
      */
     fun previousTopic() {
         if (!speechReady || playHistory.isEmpty()) return
+        if (inGap) endGap()
         val onCurrent = playHistory.last() == currentSegmentId
         if (onCurrent && playHistory.size == 1) {
             active = false
@@ -200,6 +230,13 @@ class BriefingSession @JvmOverloads constructor(
     }
 
     fun canChangeDashboardTopic(): Boolean = !started && dashboardTopics().size > 1
+
+    /** Topic picked in the Change topic popup; it plays first on start. */
+    fun chooseDashboardTopic(id: String) {
+        if (!canChangeDashboardTopic() || dashboardTopics().none { it.id == id }) return
+        preferredFirstId = id
+        replan()
+    }
 
     /** Banner swipe / Change topic: picks the next (+1) or previous (-1) page; it plays first on start. */
     fun shiftDashboardTopic(delta: Int) {
@@ -246,7 +283,15 @@ class BriefingSession @JvmOverloads constructor(
         val switchTo = regionTransition.consumePendingSwitch()
         if (switchTo != null) startRegionSection(switchTo) else updatePrediction()
         replan()
-        if (plan.segments.isNotEmpty()) { speakCurrent(); return }
+        if (plan.segments.isNotEmpty()) {
+            val gap = segmentGapListener
+            if (completed && gap != null) {
+                inGap = true
+                active = true // still "playing" for the screen and for region entry, which waits for the pause
+                gap(++gapToken)
+            } else speakCurrent()
+            return
+        }
         if (regionSectionId == null && prediction != null) waitingForRegion = true
         else finished = true
     }

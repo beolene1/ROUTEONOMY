@@ -208,6 +208,51 @@ class BriefingSessionTest {
         assertEquals(BriefingSession.State.IDLE, short.state())
     }
 
+    @Test fun finishedSegmentPausesForTheChimeBeforeTheNextOne() {
+        val gaps = mutableListOf<Int>()
+        session.setSegmentGapListener { gaps += it }
+        session.startFromDashboard()
+        finishSegment()
+        assertEquals(1, gaps.size)
+        assertTrue(session.isInGap())
+        assertEquals(BriefingSession.State.PLAYING, session.state())
+        assertEquals("m1 둘째 문장.", speech.lastText()) // nothing new spoken during the pause
+        session.finishGap(gaps.single())
+        assertFalse(session.isInGap())
+        assertEquals("m2 첫 문장.", speech.lastText())
+    }
+
+    @Test fun pauseDuringTheGapCancelsItAndPlayStartsTheNextSegment() {
+        val gaps = mutableListOf<Int>()
+        session.setSegmentGapListener { gaps += it }
+        session.startFromDashboard()
+        finishSegment()
+        session.pause()
+        session.finishGap(gaps.single()) // the delayed callback arrives after the pause: ignored
+        assertEquals("m1 둘째 문장.", speech.lastText())
+        assertFalse(session.isPlaying())
+        session.togglePlayback()
+        assertEquals("m2 첫 문장.", speech.lastText())
+    }
+
+    @Test fun nextTopicDuringTheGapSkipsOnlyThePause() {
+        session.setSegmentGapListener { }
+        session.startFromDashboard()
+        finishSegment()
+        session.nextTopic()
+        assertFalse(session.isInGap())
+        assertEquals("m2 첫 문장.", speech.lastText())
+    }
+
+    @Test fun skippedSegmentHasNoGap() {
+        val gaps = mutableListOf<Int>()
+        session.setSegmentGapListener { gaps += it }
+        session.startFromDashboard()
+        session.nextTopic()
+        assertTrue(gaps.isEmpty())
+        assertEquals("m2 첫 문장.", speech.lastText())
+    }
+
     @Test fun splitSentencesKeepsUnpunctuatedScript() {
         assertEquals(listOf("가.", "나?"), BriefingSession.splitSentences("가. 나?"))
         assertEquals(listOf("문장"), BriefingSession.splitSentences(" 문장 "))

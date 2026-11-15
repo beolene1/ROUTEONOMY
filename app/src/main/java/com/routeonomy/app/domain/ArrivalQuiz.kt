@@ -59,12 +59,26 @@ class QuizSession(val questions: List<QuizQuestion>) {
     companion object {
         const val MAX_QUESTIONS = 3
 
-        /** Questions for completed segments, in the order they were completed, at most [max]. */
+        /**
+         * Questions for completed segments, at most [max], shown in the order they were completed.
+         * With [groupOf] (e.g. the segment's category) one question per group is taken first, so a drive
+         * that covered several kinds of topics gets a question from each; the rest fill up in order.
+         */
         @JvmStatic
         @JvmOverloads
-        fun fromCompleted(all: List<QuizQuestion>, completedIds: Collection<String>, max: Int = MAX_QUESTIONS): QuizSession {
+        fun fromCompleted(
+            all: List<QuizQuestion>,
+            completedIds: Collection<String>,
+            max: Int = MAX_QUESTIONS,
+            groupOf: (String) -> Any? = { it },
+        ): QuizSession {
             val bySegment = all.associateBy { it.segmentId }
-            return QuizSession(completedIds.distinct().mapNotNull { bySegment[it] }.take(max))
+            val heard = completedIds.distinct().mapNotNull { bySegment[it] }
+            val picked = LinkedHashSet<QuizQuestion>()
+            val groups = HashSet<Any?>()
+            for (q in heard) if (picked.size < max && groups.add(groupOf(q.segmentId))) picked += q
+            for (q in heard) if (picked.size < max) picked += q
+            return QuizSession(heard.filter { it in picked })
         }
     }
 }

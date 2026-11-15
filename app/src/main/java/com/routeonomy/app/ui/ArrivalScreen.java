@@ -50,6 +50,7 @@ final class ArrivalScreen extends LinearLayout {
     private final UiStyle style;
     private final TextView greeting;
     private final LinearLayout chips;
+    private final HorizontalScrollView chipScroll;
     private final TextView record;
     private final TextView growthLine;
     private final TextView earned;
@@ -91,12 +92,14 @@ final class ArrivalScreen extends LinearLayout {
 
         addView(heading("TODAY’S LEARNING ACHIEVEMENT"), matchWrap(36));
         addView(caption("오늘의 발견 키워드"), matchWrap(6));
-        HorizontalScrollView chipScroll = new HorizontalScrollView(context);
+        chipScroll = new HorizontalScrollView(context);
         chipScroll.setHorizontalScrollBarEnabled(false);
         chipScroll.setClipToPadding(false);
         chips = row();
         chips.setPadding(0, style.size(4), 0, style.size(8));
         chipScroll.addView(chips);
+        // Keywords that would run past the right edge are hidden instead of being cut off.
+        chipScroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fitChips());
         addView(chipScroll, matchWrap(8));
         addView(caption("오늘의 학습 기록"), matchWrap(12));
         record = style.text("", 30, RECORD, true);
@@ -161,6 +164,25 @@ final class ArrivalScreen extends LinearLayout {
                 : "+" + s.quizXp + " XP" + (s.quizCanLevelUp ? " · 레벨업 가능!" : " 획득 가능!"));
         quizButton.setEnabled(s.hasQuiz);
         quizButton.setAlpha(s.hasQuiz ? 1f : 0.45f);
+    }
+
+    /** Shows the keyword chips in order while they fit on one line; the first one always shows. */
+    private void fitChips() {
+        int available = chipScroll.getWidth() - chipScroll.getPaddingLeft() - chipScroll.getPaddingRight();
+        if (available <= 0) return;
+        int used = 0;
+        boolean full = false;
+        int unspecified = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+        for (int i = 0; i < chips.getChildCount(); i++) {
+            View chip = chips.getChildAt(i);
+            chip.measure(unspecified, unspecified);
+            LayoutParams params = (LayoutParams) chip.getLayoutParams();
+            int width = chip.getMeasuredWidth() + params.getMarginStart() + params.getMarginEnd();
+            boolean show = i == 0 || (!full && used + width <= available);
+            if (!show) full = true; else used += width;
+            int visibility = show ? VISIBLE : GONE;
+            if (chip.getVisibility() != visibility) chip.setVisibility(visibility);
+        }
     }
 
     private void setArt(android.widget.ImageView view, int slot, int drawable) {

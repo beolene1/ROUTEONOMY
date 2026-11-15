@@ -15,6 +15,13 @@ class QuizSessionTest {
         assertEquals(listOf("s4", "s2", "s1"), quiz.questions.map { it.segmentId })
     }
 
+    @Test fun takesOneQuestionPerGroupFirstThenKeepsCompletionOrder() {
+        // s1, s2, s3 are one kind (e.g. 생활 경제), s4 another (e.g. 지역): s4 must not be crowded out.
+        val group = mapOf("s1" to "living", "s2" to "living", "s3" to "living", "s4" to "region")
+        val quiz = QuizSession.fromCompleted(all, listOf("s1", "s2", "s3", "s4"), 3) { group[it] }
+        assertEquals(listOf("s1", "s2", "s4"), quiz.questions.map { it.segmentId })
+    }
+
     @Test fun noCompletedSegmentsMeansEmptyQuiz() {
         val quiz = QuizSession.fromCompleted(all, emptyList())
         assertTrue(quiz.isEmpty())
