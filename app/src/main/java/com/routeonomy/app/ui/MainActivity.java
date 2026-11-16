@@ -101,6 +101,7 @@ public final class MainActivity extends Activity {
     private List<QuizQuestion> quizQuestions;
     private QuizSession quiz;
     private boolean quizHidden; // closed with X: kept so it can be resumed
+    private boolean quizResumeOnPark; // the quiz was on screen when the car left P: reopen it back in P
     private boolean quizEmptyNotice;
     private String renderedQuizKey;
     private QuizScreen quizScreen;
@@ -648,9 +649,17 @@ public final class MainActivity extends Activity {
             arrivalHidden = false;
             if (session.arrival() != DriveSession.Arrival.ARRIVED) {
                 // A cleared (simulated) arrival: drop the quiz; it must not use up the screen of the real arrival.
-                quiz = null; quizEmptyNotice = false;
+                quiz = null; quizEmptyNotice = false; quizResumeOnPark = false;
                 arrivalCelebrated = false;
-            } else if (quiz != null) quizHidden = true; // left P: keep this drive's quiz to resume in P
+            } else if (quiz != null) {
+                // Left P: keep this drive's quiz; if it was on screen, reopen it once the car is back in P.
+                if (!quizHidden) quizResumeOnPark = true;
+                quizHidden = true;
+            }
+        }
+        else if (quizResumeOnPark) {
+            quizResumeOnPark = false;
+            if (quiz != null && !learningFinished) { quizHidden = false; arrivalHidden = false; setHomeShown(false); briefing.pause(); }
         }
         else if (!arrivalCelebrated && !learningFinished) {
             // First time arrival and P hold together: the arrival summary replaces the current screen.
@@ -737,6 +746,7 @@ public final class MainActivity extends Activity {
         int unrewarded = 0;
         for (QuizQuestion q : offer.getQuestions()) if (!progress.isQuizAnswerRewarded(q.getSegmentId())) unrewarded++;
         summary.hasQuiz = !offer.isEmpty();
+        summary.quizInProgress = quiz != null && !quiz.isFinished();
         summary.quizXp = unrewarded * com.routeonomy.app.domain.PointRules.QUIZ_CORRECT;
         summary.quizCanLevelUp = toNext != null && summary.quizXp >= toNext;
         arrivalScreen.bind(summary);
@@ -928,7 +938,7 @@ public final class MainActivity extends Activity {
     private void renderQuiz(){
         boolean showQuiz = quiz != null && !quizHidden && !homeShown;
         quizScroll.setVisibility(showQuiz ? View.VISIBLE : View.GONE);
-        if (showQuiz) briefingScroll.setVisibility(View.GONE);
+        if (showQuiz) { briefingScroll.setVisibility(View.GONE); dashboardScroll.setVisibility(View.GONE); }
         // render() runs on many unrelated events; rebind only when the quiz state changed.
         // Points are in the key too: demo point buttons change whether the hint can be shown.
         String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice()

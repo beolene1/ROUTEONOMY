@@ -38,6 +38,8 @@ final class ArrivalScreen extends LinearLayout {
         int stageNeeded;
         /** XP the quiz can still give, 0 when there is no quiz. */
         int quizXp;
+        /** A quiz of this drive was left unfinished (e.g. by shifting out of P). */
+        boolean quizInProgress;
         boolean quizCanLevelUp;
         boolean hasQuiz;
     }
@@ -166,6 +168,7 @@ final class ArrivalScreen extends LinearLayout {
                 : s.quizXp == 0 ? "오늘 퀴즈를 다시 풀어 볼 수 있어요"
                 : "+" + s.quizXp + " XP" + (s.quizCanLevelUp ? " · 레벨업 가능!" : " 획득 가능!"));
         finishButton.setText(s.hasQuiz ? "퀴즈 없이 마치기" : "오늘 학습 마치기");
+        quizButton.setText(s.quizInProgress ? "퀴즈 이어 풀기" : "Today’s Economic Quiz");
         quizButton.setEnabled(s.hasQuiz);
         quizButton.setAlpha(s.hasQuiz ? 1f : 0.45f);
     }
