@@ -214,7 +214,7 @@
 
 ### SDK 이벤트가 앱 동작이 되기까지
 
-도착과 P가 확인되면 퀴즈를 시작할 수 있는 화면이 열립니다. 출제 범위는 그동안 끝까지 들은 이야기로 정해집니다.
+차량에서 오는 SDK 신호 네 가지(기어, 위치, 근접 알림, 음성 완료)가 앱 안에서 어떤 판단을 거쳐 음성과 화면으로 바뀌는지 보여 주는 그림입니다. 노란 타원은 Pleos SDK, 주황 상자는 신호를 받아 상태를 판단하는 앱 코드, 갈색 상자는 사용자가 보게 되는 결과입니다.
 
 ```mermaid
 ---
@@ -222,13 +222,16 @@ config:
   htmlLabels: false
 ---
 flowchart LR
-    tts(["TextToSpeech 문장 완료"]) --> playback["BriefingSession"]
-    location(["FusedLocation 위치"]) --> estimate["남은 시간·경유지 추정"] --> playback
-    location --> fence["GeofenceGate"]
+    location(["FusedLocation 위치"]) --> estimate["남은 시간·경유지 추정"] --> playback["BriefingSession 편성·재생"]
+    location --> fence["GeofenceGate 진입 판정"]
     proximity(["FusedLocation 근접 알림"]) --> fence
     fence -->|"판교 진입"| playback
+    playback -->|"문장 읽기"| gate["SpeechGate"]
+    gate -->|"speak"| tts(["TextToSpeech"])
+    tts -->|"문장 완료"| gate
+    gate -->|"완료 전달"| playback
     playback -->|"마지막 문장 완료"| heard["청취 기록·XP·퀴즈 출제 범위"]
-    fence -->|"기흥역 진입"| drive["DriveSession"]
+    fence -->|"기흥역 진입"| drive["DriveSession 기어·도착 상태"]
     gear(["Vehicle 기어 변경"]) --> drive
     drive -->|"도착 + P"| arrival["도착 정리 화면·퀴즈 버튼"]
 
@@ -236,9 +239,15 @@ flowchart LR
     classDef state fill:#ffe2c9,stroke:#b45b26,color:#652e0a
     classDef result fill:#8d3d1c,stroke:#8d3d1c,color:#fff7ed
     class location,proximity,tts,gear event
-    class estimate,fence,playback,drive state
+    class estimate,fence,playback,gate,drive state
     class heard,arrival result
 ```
+
+**주행 중에는 위치가 브리핑을 움직입니다.** FusedLocation 위치가 들어올 때마다 목적지까지 남은 직선거리로 남은 시간을 다시 추정하고, `BriefingSession`이 아직 재생하지 않은 이야기를 그 시간에 맞게 다시 고릅니다. 같은 위치는 `GeofenceGate`에도 들어가 판교와 기흥역 반경에 들어섰는지 판정합니다. Pleos 근접 알림(ENTER/EXIT)도 같은 곳으로 모여, 위치와 알림 중 먼저 온 신호 한 번만 진입으로 인정합니다. 판교 진입이 인정되면 듣던 이야기를 마친 뒤 판교 이야기로 넘어갑니다.
+
+**음성은 문장 단위로 주고받습니다.** `BriefingSession`은 원고를 한 문장씩 `SpeechGate`를 거쳐 TextToSpeech에 읽게 하고, 문장 완료 신호를 받으면 다음 문장을 읽습니다. 한 이야기의 마지막 문장까지 완료 신호가 오면 그 이야기를 '끝까지 들은 이야기'로 기록합니다. 이 기록이 XP, 오늘의 발견, 퀴즈 출제 범위가 됩니다. 중간에 건너뛴 이야기는 기록되지 않습니다.
+
+**도착 정리는 도착과 P가 모두 확인돼야 열립니다.** 기흥역 진입이 인정되면 `DriveSession`의 도착 상태가 '도착'으로 바뀌고, 반경을 잠깐 벗어나도 유지됩니다. Vehicle 기어 신호도 `DriveSession`에 들어가며, 도착과 P가 함께 성립할 때만 도착 정리 화면과 퀴즈 버튼이 열립니다. 도착 전에 P로 바꾸면 원고와 오늘의 발견은 볼 수 있지만 퀴즈는 열리지 않습니다.
 
 ### 구현하면서 신경 쓴 점
 
@@ -246,6 +255,14 @@ flowchart LR
 - **위치 콜백과 근접 알림의 중복 제거**: `GeofenceGate`는 지역과 목적지별로 두 경로에서 온 진입을 한 번만 처리합니다. 첫 실제 위치가 이미 반경 안이면 반경 밖을 확인한 뒤의 진입부터 인정합니다.
 - **스레드와 자원 정리**: SDK 콜백은 메인 스레드로 옮겨 처리하고, 앱이 끝날 때 리스너·근접 알림·SDK 연결을 모두 해제합니다.
 - **SDK 우선, 시연 입력은 백업**: 시뮬레이션 입력은 SDK가 신호를 주지 못할 때만 쓰는 버튼입니다. 위치 이동 버튼과 앱 안 시연 주행도 FusedLocation 위치와 같은 처리 경로를 거쳐, 판정 로직은 하나만 둡니다.
+- **주행 중 화면 유지**: 매니페스트에 `distractionOptimized`를 선언했고, 앱 목록에서 실행한 Routeonomy가 기어 D에서도 Pleos의 '주행 중에는 사용할 수 없습니다' 화면에 가려지지 않는 것을 에뮬레이터에서 확인했습니다. 주행 화면에는 큰 버튼 몇 개만 두고, 원고·오늘의 발견·퀴즈처럼 읽어야 하는 화면은 P에서만 엽니다.
+- **지역 전환은 이야기 단위로**: 판교 진입을 감지해도 듣던 이야기를 끊지 않고 끝까지 들려준 뒤 넘어갑니다. 진입 전 이야기가 먼저 모두 끝나면 '판교 진입 대기'로 기다리고, 한 주행에서 지역 전환은 한 번만 처리합니다.
+- **이야기 사이의 짧은 쉼**: 이야기가 끝날 때마다 알림음을 울리고 몇 초 쉰 뒤 다음 이야기를 읽습니다. 그 사이에 일시정지하거나 주제를 옮기면 예약해 둔 재생을 번호표(token)로 무효화해, 멈춘 뒤에 음성이 다시 나오지 않게 했습니다.
+- **홈에 있을 때는 자동 재생 보류**: 홈 화면을 보는 동안에는 위치 갱신이나 지역 진입이 있어도 음성을 스스로 시작하지 않습니다. 다시 시작을 누르면 멈춘 문장의 처음부터 이어 듣습니다.
+- **도착 뒤 상태 보존**: 도착 판정은 GPS가 반경 경계에서 흔들려도 풀리지 않게 유지합니다. 퀴즈 도중 기어를 D로 바꿨다가 P로 돌아오면 풀던 문항을 다시 열고, 도착 뒤에는 오늘의 발견만 볼 수 있게 재생을 잠급니다.
+- **XP 중복 적립 방지**: 같은 주행에서 같은 이야기를 다시 듣거나 같은 문항을 다시 풀어도 보상은 한 번만 주고, 힌트 비용도 문항마다 한 번만 받습니다. 진행 상황은 바뀔 때마다 기기에 저장합니다.
+- **화면 폭 대응**: 2560 × 1440 전체 창을 기준으로 만들고, 폭이 1200dp보다 좁은 반반 분할 창에서는 경로 그림과 정보 영역을 위아래로 배치합니다.
+- **테스트와 CI**: 남은 시간 추정, 경유지 예측, 진입 판정, 재생 순서, 브리핑 편성, 퀴즈 채점, XP 규칙, TTS 콜백 보정을 JVM 단위 테스트 125개로 확인합니다. GitHub Actions가 push와 PR마다 `tools/verify.sh`(단위 테스트, lint, 디버그 빌드)를 실행합니다.
 
 ### 에뮬레이터 제약과 대응
 
@@ -257,7 +274,7 @@ flowchart LR
 
 ## 아키텍처
 
-단일 Android `:app` 모듈에서 `ui/MainActivity`가 화면, SDK 어댑터, 저장소, 도메인 세션을 연결합니다. `domain`에는 남은 시간 추정, 지역 진입, 브리핑 편성·재생, 퀴즈 채점, XP 규칙이 있습니다. `data`는 앱 내 JSON, 외부 지표 조회와 저장값, XP와 학습 피드백 저장을 담당합니다.
+단일 Android `:app` 모듈에서 `ui/MainActivity`가 화면, SDK 어댑터, 저장소, 도메인 세션을 연결합니다. `domain`에는 남은 시간 추정, 지역 진입, 브리핑 편성·재생, 퀴즈 채점, XP 규칙이 있습니다. `data`는 앱 내 JSON, 외부 지표 조회와 저장값, XP와 학습 피드백 저장을 담당합니다. `pleos`·`data`·`simulation`은 `domain`의 모델만 참조하고, `domain`은 Android, Pleos SDK, 다른 패키지를 전혀 참조하지 않아 JVM 단위 테스트로 바로 검증할 수 있습니다.
 
 ```mermaid
 ---
@@ -275,9 +292,9 @@ flowchart TB
         ui["ui · MainActivity 및 화면"]
         domain["domain · 주행·재생·퀴즈·XP"]
 
-        pleos --> ui
-        sim --> ui
-        data --> ui
+        pleos <-->|"SDK 이벤트·요청"| ui
+        sim -->|"가상 기어·위치"| ui
+        data <-->|"읽기·저장"| ui
         ui <-->|"상태·명령"| domain
     end
 
@@ -327,7 +344,7 @@ release APK는 `./gradlew :app:assembleRelease`로 만듭니다. 서명 키는 �
 
 | 이름 | 역할 |
 | --- | --- |
-| yeonbyo | 기획 · 디자인 |
+| yeonbyo ([@yeonbyo](https://github.com/yeonbyo)) | 기획 · 디자인 |
 | beolene ([@beolene1](https://github.com/beolene1)) | 기획 · 개발 |
 
 ## 참고
