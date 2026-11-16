@@ -88,10 +88,20 @@ public final class MainActivity extends Activity {
     private int dashboardWidthDp = -1;
     private boolean simulationOpen;
     private LinearLayout demoMovePanel;
+    // Demo drive: moves the position along the route inside the app (no emulator GPX needed).
+    // Once used, Pleos FusedLocation fixes are ignored until the app restarts, so they cannot pull it back.
+    private com.routeonomy.app.simulation.DemoDrive demoDrive;
+    private boolean demoDriveUsed;
+    private long demoElapsedMillis;
+    private long demoResumedAt = -1; // -1 while paused
+    private Button demoPauseButton;
+    private final Handler demoHandler = new Handler(Looper.getMainLooper());
+    private final Runnable demoTick = this::onDemoTick;
     // Arrival quiz: null until started; dropped whenever P+ARRIVED no longer holds.
     private List<QuizQuestion> quizQuestions;
     private QuizSession quiz;
     private boolean quizHidden; // closed with X: kept so it can be resumed
+    private boolean quizResumeOnPark; // the quiz was on screen when the car left P: reopen it back in P
     private boolean quizEmptyNotice;
     private String renderedQuizKey;
     private QuizScreen quizScreen;
@@ -117,6 +127,8 @@ public final class MainActivity extends Activity {
     // Home (pre-drive dashboard) opened from the briefing screen; audio is paused while it shows.
     private boolean homeShown;
     private boolean arrivalCelebrated; // arrival opens its screen once per arrival
+    // "오늘 학습 마치기" done (review sent or skipped): home shows it as finished; no resume, no arrival screen.
+    private boolean learningFinished;
     private ScrollView quizScroll;
     // Points given for the last submitted answer, for the quiz feedback line.
     private QuizSession awardQuiz;
@@ -198,7 +210,7 @@ public final class MainActivity extends Activity {
         locationSource = new FusedLocationSource(this, fences, new FusedLocationSource.Listener() {
             @Override public void onLocation(GeoPoint point) { runOnUiThread(() -> onRealLocation(point)); }
             @Override public void onFenceTransition(String fenceId, boolean entered) { runOnUiThread(() -> onProximityAlert(fenceId, entered)); }
-            @Override public void onStatus(String message) { runOnUiThread(() -> { locationSourceStatus = message; render(); }); }
+            @Override public void onStatus(String message) { runOnUiThread(() -> { if (!demoDriveUsed) locationSourceStatus = message; render(); }); }
         });
         startLocation();
     }
@@ -236,11 +248,19 @@ public final class MainActivity extends Activity {
         Button nearNext=button("다음 단계 직전"); nearNext.setOnClickListener(v->{progress.moveNearNextStage();render();}); pointControls.addView(nearNext,weight());
         Button resetPoints=button("XP 초기화"); resetPoints.setOnClickListener(v->{progress.resetAll();render();}); pointControls.addView(resetPoints,weight());
         simulationPanel.addView(pointControls);
+        // Demo only: drive the route inside the app (replaces loading the GPX in the emulator Location panel).
+        LinearLayout demoDriveRow=new LinearLayout(this);
+        for (int speed : new int[]{3, 5, 10}) {
+            Button b=button("시연 주행 "+speed+"배속"); b.setOnClickListener(v->startDemoDrive(speed)); demoDriveRow.addView(b,weight());
+        }
+        simulationPanel.addView(demoDriveRow);
         // Demo-only movement row. It is the one simulation control kept on the driving screen.
         demoMovePanel=new LinearLayout(this); demoMovePanel.setOrientation(LinearLayout.VERTICAL);
         List<Place> stops = fakeRoute.stops();
         if (!stops.isEmpty()) addMoveButton(stops.get(0));
         if (stops.size() > 1) addMoveButton(stops.get(stops.size()-1));
+        demoPauseButton=button("시연 주행 일시정지"); demoPauseButton.setOnClickListener(v->toggleDemoDrive());
+        demoPauseButton.setVisibility(View.GONE); demoMovePanel.addView(demoPauseButton,full());
         Button etaRefresh=button("NaviHelper ETA 조회"); etaRefresh.setOnClickListener(v->naviEtaClient.refresh()); simulationPanel.addView(etaRefresh,full());
         sdkStatus=label(13,ink); simulationPanel.addView(sdkStatus);
         simulationPanel.setVisibility(View.GONE); root.addView(simulationPanel);
@@ -248,8 +268,8 @@ public final class MainActivity extends Activity {
 
         quizStatus=label(18,ink); root.addView(quizStatus,1);
         quizButton=button("도착 후 퀴즈 시작"); quizButton.setOnClickListener(v->startQuiz()); root.addView(quizButton,2,full());
-        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext, this::openReviewFlow,
-                this::goHome);
+        quizScreen = new QuizScreen(this, this::closeQuiz, this::openSimulationFromQuiz, this::onQuizAnswer, this::onQuizNext,
+                this::showDiscoveriesFromQuiz, this::openReviewFlow);
         quizScreen.setPadding(style.size(46), style.size(41), style.size(46), style.size(48));
         quizScroll = new ScrollView(this);
         quizScroll.setFillViewport(true);
@@ -362,6 +382,7 @@ public final class MainActivity extends Activity {
     }
 
     private void togglePlayback() {
+        if (playbackLocked()) return;
         briefing.togglePlayback();
         render();
     }
@@ -382,7 +403,9 @@ public final class MainActivity extends Activity {
 
     /** Home button / system back on the briefing screen: confirm first when audio is in progress. */
     private void requestHome() {
+        if (learningFinished) { goHome(); return; }
         if (session.canStartQuiz() && arrivalHidden) { // arrived: the briefing screen was opened over S3
+            briefing.pause();
             arrivalHidden = false;
             render();
             return;
@@ -440,7 +463,12 @@ public final class MainActivity extends Activity {
         render();
     }
 
+    /** After arrival in P, or once today's learning is finished, the briefing screen is read-only. */
+    private boolean playbackLocked() { return learningFinished || session.canStartQuiz(); }
+
     private void startDashboardBriefing() {
+        if (learningFinished) return;
+        if (session.canStartQuiz()) { setHomeShown(false); render(); return; } // arrived in P: back to the summary
         if (!ttsReady) {
             dashboard.showStatus(playbackText());
             return;
@@ -459,7 +487,47 @@ public final class MainActivity extends Activity {
     private void addMoveButton(Place stop){Button b=button(stop.getName()+LevelUpPopup.particleRo(stop.getName())+" 이동");b.setOnClickListener(v->{fakeRoute.moveTo(stop);applyLocation(fakeRoute.getLocation());});demoMovePanel.addView(b,full());}
     private String regionName(String id){for(Region r:regions) if(r.getId().equals(id)) return r.getName(); return id;}
 
+    private void startDemoDrive(int speed) {
+        demoDrive = new com.routeonomy.app.simulation.DemoDrive(routePoints, trip.getRemainingMinutes(), speed);
+        demoDriveUsed = true;
+        demoElapsedMillis = 0;
+        demoResumedAt = android.os.SystemClock.elapsedRealtime();
+        locationSourceStatus = "위치: 앱 시연 주행 " + speed + "배속";
+        demoPauseButton.setVisibility(View.VISIBLE);
+        demoPauseButton.setText("시연 주행 일시정지");
+        demoHandler.removeCallbacks(demoTick);
+        onDemoTick();
+    }
+    private void toggleDemoDrive() {
+        if (demoDrive == null) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (demoResumedAt >= 0) { // pause
+            demoElapsedMillis += now - demoResumedAt;
+            demoResumedAt = -1;
+            demoHandler.removeCallbacks(demoTick);
+            demoPauseButton.setText("시연 주행 계속");
+        } else {
+            demoResumedAt = now;
+            demoPauseButton.setText("시연 주행 일시정지");
+            onDemoTick();
+        }
+    }
+    private void onDemoTick() {
+        if (demoDrive == null || demoResumedAt < 0) return;
+        long elapsed = demoElapsedMillis + android.os.SystemClock.elapsedRealtime() - demoResumedAt;
+        applyLocation(demoDrive.positionAt(elapsed));
+        if (demoDrive.isFinished(elapsed)) {
+            demoDrive = null;
+            demoPauseButton.setVisibility(View.GONE);
+            locationSourceStatus = "위치: 앱 시연 주행 끝";
+            render();
+            return;
+        }
+        demoHandler.postDelayed(demoTick, 1000);
+    }
+
     private void onRealLocation(GeoPoint point) {
+        if (demoDriveUsed) return; // the demo drive owns the position until restart
         // The first real fix replaces the simulated start: fences count only after a real fix outside them.
         // Until then the simulation buttons keep working as a backup.
         if (lastRealFix == null) geofenceGate.reset();
@@ -468,7 +536,7 @@ public final class MainActivity extends Activity {
     }
     /** Pleos proximity alert; the gate drops registration-time and duplicate events. */
     private void onProximityAlert(String fenceId, boolean entered) {
-        if (lastRealFix == null) return; // registration-time alert before the first real fix
+        if (lastRealFix == null || demoDriveUsed) return; // registration-time alert, or the demo drive owns the position
         boolean accepted = entered ? geofenceGate.onEnter(fenceId) : geofenceGate.onExit(fenceId);
         if (!accepted) return;
         lastAlert = fenceName(fenceId) + (entered ? " 진입" : " 이탈");
@@ -541,7 +609,9 @@ public final class MainActivity extends Activity {
         nowPlaying.setDriving(driving);
         BriefingSegment current = briefing.currentSegment();
         BriefingSegment shownTopic = briefing.dashboardTopic();
+        dashboard.setLearningFinished(learningFinished);
         dashboard.bindTopic(shownTopic, briefing.canChangeDashboardTopic());
+        nowPlaying.setReviewOnly(playbackLocked());
         String route = routeStatusText();
         boolean arrived = session.arrival() == DriveSession.Arrival.ARRIVED;
         int driveLeft = arrived ? 0 : session.etaMinutes(); // the estimator never goes below 1 minute
@@ -576,12 +646,22 @@ public final class MainActivity extends Activity {
                 ? !showDashboard || !briefing.canChangeDashboardTopic() : !quizAllowed))) choicePopup.hide();
         if (levelUpPopup.isShowing() && (driving || !quizAllowed)) levelUpPopup.hide();
         if (!quizAllowed) {
-            quiz = null; quizEmptyNotice = false; // left P or arrival was cleared: stop the quiz
             arrivalHidden = false;
-            // A cleared (simulated) arrival must not use up the screen of the real arrival.
-            if (session.arrival() != DriveSession.Arrival.ARRIVED) arrivalCelebrated = false;
+            if (session.arrival() != DriveSession.Arrival.ARRIVED) {
+                // A cleared (simulated) arrival: drop the quiz; it must not use up the screen of the real arrival.
+                quiz = null; quizEmptyNotice = false; quizResumeOnPark = false;
+                arrivalCelebrated = false;
+            } else if (quiz != null) {
+                // Left P: keep this drive's quiz; if it was on screen, reopen it once the car is back in P.
+                if (!quizHidden) quizResumeOnPark = true;
+                quizHidden = true;
+            }
         }
-        else if (!arrivalCelebrated) {
+        else if (quizResumeOnPark) {
+            quizResumeOnPark = false;
+            if (quiz != null && !learningFinished) { quizHidden = false; arrivalHidden = false; setHomeShown(false); briefing.pause(); }
+        }
+        else if (!arrivalCelebrated && !learningFinished) {
             // First time arrival and P hold together: the arrival summary replaces the current screen.
             arrivalCelebrated = true;
             arrivalHidden = false;
@@ -605,7 +685,7 @@ public final class MainActivity extends Activity {
         if (!session.canStartQuiz()) return;
         briefing.pause(); // same for the arrival popup and the quiz button
         setHomeShown(false); // e.g. from the arrival popup shown over the home screen
-        if (quiz != null && quizHidden && !quiz.isFinished()) { quizHidden = false; render(); return; } // resume
+        if (quiz != null && quizHidden) { quizHidden = false; render(); return; } // resume, or show the result again
         QuizSession next = QuizSession.fromCompleted(quizQuestions, briefing.completedSegmentIds(),
                 QuizSession.MAX_QUESTIONS, this::categoryOf);
         if (next.isEmpty()) {
@@ -633,7 +713,7 @@ public final class MainActivity extends Activity {
 
     /** S3: shown while arrived and in P, unless the quiz, home or the briefing screen was opened over it. */
     private void renderArrival(boolean quizAllowed) {
-        boolean show = quizAllowed && !arrivalHidden && !homeShown && !(quiz != null && !quizHidden);
+        boolean show = quizAllowed && !learningFinished && !arrivalHidden && !homeShown && !(quiz != null && !quizHidden);
         arrivalScroll.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
         briefingScroll.setVisibility(View.GONE);
@@ -666,6 +746,7 @@ public final class MainActivity extends Activity {
         int unrewarded = 0;
         for (QuizQuestion q : offer.getQuestions()) if (!progress.isQuizAnswerRewarded(q.getSegmentId())) unrewarded++;
         summary.hasQuiz = !offer.isEmpty();
+        summary.quizInProgress = quiz != null && !quiz.isFinished();
         summary.quizXp = unrewarded * com.routeonomy.app.domain.PointRules.QUIZ_CORRECT;
         summary.quizCanLevelUp = toNext != null && summary.quizXp >= toNext;
         arrivalScreen.bind(summary);
@@ -701,14 +782,35 @@ public final class MainActivity extends Activity {
                         return false;
                     }
                     @Override public void onPrimary(int selected) {
-                        reviewStore.save(com.routeonomy.app.domain.LessonReview.values()[selected]);
-                        choicePopup.hide();
-                        showAppToast("✓  오늘의 리뷰가 저장되었어요. 고마워요!");
-                        updateBackCallback();
+                        if (!learningFinished) reviewStore.save(com.routeonomy.app.domain.LessonReview.values()[selected]);
+                        finishLearning("✓  리뷰가 저장되었어요. 오늘 학습 완료!");
                     }
-                    @Override public void onSecondary() { choicePopup.hide(); updateBackCallback(); }
+                    @Override public void onSecondary() { finishLearning("✓  오늘 학습을 마쳤어요. 수고했어요!"); }
                 });
         updateBackCallback();
+    }
+
+    /** Ends today's learning once: audio stays paused and home shows "오늘 학습 완료" (next drive: restart the app). */
+    private void finishLearning(String message) {
+        choicePopup.hide();
+        if (!learningFinished) {
+            learningFinished = true;
+            showAppToast(message);
+        }
+        briefing.pause();
+        if (quiz != null) quizHidden = true;
+        arrivalHidden = false;
+        toolsOpen = false;
+        detailsOpen = false;
+        setHomeShown(true);
+        render();
+    }
+
+    /** Quiz result "오늘의 발견": the read-only briefing screen with today's discoveries. */
+    private void showDiscoveriesFromQuiz() {
+        quizHidden = true;
+        showDetailsFromArrival();
+        briefingScroll.post(() -> briefingScroll.smoothScrollTo(0, discoveries.getTop()));
     }
 
     /** Short message over the app column that fades out by itself. */
@@ -794,7 +896,7 @@ public final class MainActivity extends Activity {
             quiz.next();
             // S5 quiz result → 레벨업? → P2 (its 오늘의 정리 opens P3).
             if (quiz.isFinished() && pendingLevelUp() != null) quizScroll.postDelayed(() -> {
-                if (quiz != null && quiz.isFinished() && !quizHidden) showLevelUp(true);
+                if (quiz != null && quiz.isFinished() && !quizHidden) showLevelUp(false); // celebrate; wrap-up is a button
             }, 450);
         }
         renderQuiz();
@@ -806,8 +908,12 @@ public final class MainActivity extends Activity {
         return grown == null || grown == celebratedStage ? null : grown;
     }
 
-    /** 오늘의 정리 (S3 Review lesson, quiz result): a pending level-up first (P2), then the review (P3). */
+    /**
+     * "오늘 학습 마치기" (arrival screen, quiz result): a pending level-up first (P2), then the review (P3);
+     * sending or skipping the review finishes today's learning and returns home.
+     */
     private void openReviewFlow() {
+        if (learningFinished) { goHome(); return; }
         if (pendingLevelUp() != null) showLevelUp(true);
         else openReview();
     }
@@ -832,7 +938,7 @@ public final class MainActivity extends Activity {
     private void renderQuiz(){
         boolean showQuiz = quiz != null && !quizHidden && !homeShown;
         quizScroll.setVisibility(showQuiz ? View.VISIBLE : View.GONE);
-        if (showQuiz) briefingScroll.setVisibility(View.GONE);
+        if (showQuiz) { briefingScroll.setVisibility(View.GONE); dashboardScroll.setVisibility(View.GONE); }
         // render() runs on many unrelated events; rebind only when the quiz state changed.
         // Points are in the key too: demo point buttons change whether the hint can be shown.
         String key = quiz == null ? null : System.identityHashCode(quiz) + ":" + quiz.position() + ":" + quiz.selectedChoice()
@@ -883,11 +989,13 @@ public final class MainActivity extends Activity {
     }
     /** "다음 주제": skips the topic being played; before anything started it does nothing (no silent skip). */
     private void nextTopic(){
+        if (playbackLocked()) return;
         briefing.nextTopic();
         render();
     }
     /** "이전 주제": replays the earlier topic from its start, or restarts the only one. */
     private void previousTopic(){
+        if (playbackLocked()) return;
         briefing.previousTopic();
         render();
     }
@@ -940,5 +1048,5 @@ public final class MainActivity extends Activity {
         applyLayout();
         render();
     }
-    @Override protected void onDestroy(){gapHandler.removeCallbacksAndMessages(null);if(segmentChime!=null)segmentChime.release();if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
+    @Override protected void onDestroy(){demoHandler.removeCallbacksAndMessages(null);gapHandler.removeCallbacksAndMessages(null);if(segmentChime!=null)segmentChime.release();if(indicatorRepository!=null)indicatorRepository.close();if(speaker!=null)speaker.release();if(gearMonitor!=null)gearMonitor.close();if(naviEtaClient!=null)naviEtaClient.close();if(locationSource!=null)locationSource.stop();super.onDestroy();}
 }

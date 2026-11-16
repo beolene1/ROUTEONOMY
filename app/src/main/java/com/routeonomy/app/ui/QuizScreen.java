@@ -244,8 +244,8 @@ final class QuizScreen extends LinearLayout {
             showNote(perfect ? "● 모두 맞혔어요!" : "● 수고했어요!", UiStyle.GREEN,
                     (perfect ? "오늘 브리핑을 잘 기억하고 계시네요." : "틀린 문제는 오늘의 발견에서 다시 확인해 보세요.")
                             + "\n" + rewards.resultLine(), UiStyle.MINT);
-            setLeft("오늘의 정리", UiStyle.MUTED, true);
-            setPrimary("홈으로", true);
+            setLeft("오늘의 발견", UiStyle.MUTED, true);
+            setPrimary("오늘 학습 마치기", true);
             return;
         }
         QuizQuestion current = quiz.current();

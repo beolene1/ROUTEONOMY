@@ -1,5 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
+}
+
+// Release signing: local.properties `releaseSigningProperties` points to a keystore.properties kept
+// outside the repository (storeFile, storePassword, keyAlias, keyPassword). Without it release stays unsigned.
+val releaseSigning: Properties? = Properties().let { local ->
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(local::load)
+    local.getProperty("releaseSigningProperties")?.let(::file)?.takeIf { it.exists() }
+        ?.let { f -> Properties().apply { f.inputStream().use(::load) } }
 }
 
 android {
@@ -18,11 +28,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        releaseSigning?.let { props ->
+            create("release") {
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+            // Library-only R8 optimization crashed the release app at start (IllegalAccessError in
+            // androidx.startup); the APK is a demo build, so it ships unoptimized like debug.
             optimization {
-                enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                enable = false
             }
         }
     }

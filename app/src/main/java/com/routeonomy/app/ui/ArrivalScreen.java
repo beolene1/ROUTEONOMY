@@ -17,7 +17,7 @@ import java.util.List;
 
 /**
  * Figma S3 "도착 정산" (arrived and in P): greeting, today's keywords and study record,
- * XP earned this drive on the growth bar, then Review lesson · Today's Economic Quiz · tools · details.
+ * XP earned this drive on the growth bar, then 오늘 학습 마치기 · Today's Economic Quiz · tools · details.
  */
 final class ArrivalScreen extends LinearLayout {
     /** Everything the screen shows; built by the activity from the briefing and PlayerProgress. */
@@ -38,6 +38,8 @@ final class ArrivalScreen extends LinearLayout {
         int stageNeeded;
         /** XP the quiz can still give, 0 when there is no quiz. */
         int quizXp;
+        /** A quiz of this drive was left unfinished (e.g. by shifting out of P). */
+        boolean quizInProgress;
         boolean quizCanLevelUp;
         boolean hasQuiz;
     }
@@ -61,6 +63,7 @@ final class ArrivalScreen extends LinearLayout {
     private final int[] boundArt = new int[3];
     private final TextView quizNote;
     private final TextView quizButton;
+    private final TextView finishButton;
     private String boundKeywords;
 
     ArrivalScreen(Context context, Runnable onReview, Runnable onQuiz, Runnable onSettings, Runnable onDetails) {
@@ -121,7 +124,9 @@ final class ArrivalScreen extends LinearLayout {
         noteParams.setMarginEnd(style.size(158));
         addView(quizNote, noteParams);
         LinearLayout actions = row();
-        TextView review = style.action("Review lesson", false, onReview);
+        // Wraps up today's learning (level-up → review → home); the quiz is optional.
+        TextView review = style.action("오늘 학습 마치기", false, onReview);
+        finishButton = review;
         review.setTextSize(26);
         review.setBackground(style.shape(UiStyle.NEUTRAL, 36));
         actions.addView(review, new LayoutParams(0, style.size(72), 1f));
@@ -162,6 +167,8 @@ final class ArrivalScreen extends LinearLayout {
         quizNote.setText(!s.hasQuiz ? "끝까지 들은 이야기가 있어야 퀴즈를 풀 수 있어요"
                 : s.quizXp == 0 ? "오늘 퀴즈를 다시 풀어 볼 수 있어요"
                 : "+" + s.quizXp + " XP" + (s.quizCanLevelUp ? " · 레벨업 가능!" : " 획득 가능!"));
+        finishButton.setText(s.hasQuiz ? "퀴즈 없이 마치기" : "오늘 학습 마치기");
+        quizButton.setText(s.quizInProgress ? "퀴즈 이어 풀기" : "Today’s Economic Quiz");
         quizButton.setEnabled(s.hasQuiz);
         quizButton.setAlpha(s.hasQuiz ? 1f : 0.45f);
     }
