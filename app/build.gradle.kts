@@ -42,9 +42,10 @@ android {
     buildTypes {
         release {
             signingConfigs.findByName("release")?.let { signingConfig = it }
+            // Library-only R8 optimization crashed the release app at start (IllegalAccessError in
+            // androidx.startup); the APK is a demo build, so it ships unoptimized like debug.
             optimization {
-                enable = true
-                packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
+                enable = false
             }
         }
     }
