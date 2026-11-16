@@ -310,8 +310,6 @@ flowchart TB
     style app fill:none,stroke:#738eac
 ```
 
-초기 설계와 구현 결정은 [아키텍처 문서](docs/ARCHITECTURE.md), 기능별 요구사항은 [제품 명세](docs/PRODUCT.md)에 있습니다.
-
 ## 기술 스택
 
 - **언어** — Kotlin, Java
